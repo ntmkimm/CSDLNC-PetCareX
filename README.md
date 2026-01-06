@@ -32,6 +32,9 @@ PetCareX/
 ├─ petcarex-admin/           # FRONTEND FRONTEND
 │  ├─ public/
 │  └─ src/
+├─ scripts/
+│  ├─ test.py          # test login vào database
+│  └─ drop_db.py          # drop database sql
 ├─ requirements.txt
 └─ README.md
 
