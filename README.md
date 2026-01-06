@@ -3,31 +3,31 @@
 
 ```text
 PetCareX/
-├─ app/                    # BACKEND
+├─ app/                    # BACKEND FOLDER
 │  ├─ main.py
 │  ├─ core/
 │  │  ├─ config.py          # đọc .env
-│  │  ├─ security.py        # JWT + hash password
+│  │  └─ security.py        # JWT + hash password
 │  ├─ db/
 |  │  ├─ session.py         # SQLAlchemy engine/session
-│  │  ├─ migrate.py         # tạo DB + chạy *.sql trong migrations/
+│  │  └─ migrate.py         # tạo DB + chạy *.sql trong migrations/
 │  ├─ api/
 │  │  ├─ router.py
 │  │  ├─ deps.py            # dependency get_db + auth
-│  │  ├─ routes/
-│  │  │  ├─ auth.py
-│  │  │  ├─ customer.py     # KH1-KH7
-│  │  │  ├─ staff.py        # NV1-NV8
-│  │  │  ├─ branch.py       # CN1-CN9
-│  │  │  ├─ company.py      # CT1-CT8
+│  │  └─ routes/
+│  │    ├─ auth.py
+│  │    ├─ customer.py     # KH1-KH7
+│  │    ├─ staff.py        # NV1-NV8
+│  │    ├─ branch.py       # CN1-CN9
+│  │    └─  company.py      # CT1-CT8
 │  ├─ schemas/              # Pydantic request/response
-│  ├─ services/             # business logic gọi SQL / stored procedure
+│  └─ services/             # business logic gọi SQL / stored procedure
 ├─ migrations/
 │  ├─ 000_base.sql          # file schema bạn đang có
 │  ├─ 001_logic.sql         # function/procedure/trigger (nếu có)
-│  ├─ 002_seed.sql          # (tuỳ) seed dữ liệu mẫu
+│  └─  002_seed.sql          # (tuỳ) seed dữ liệu mẫu
 ├─ requirements.txt
-├─ petcarex-admin/           # FRONTEND
+├─ petcarex-admin/           # FRONTEND FRONTEND
 └─ README.md
 
 ```
