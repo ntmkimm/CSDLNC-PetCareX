@@ -64,6 +64,12 @@ def staff_login(ma_nv: str, password: str, db: Session = Depends(get_db)):
     role = "staff"
     if nv["ChucVu"] == "Quản lí":
         role = "branch_manager"
+    elif nv["ChucVu"] == "Nhân viên bán hàng":
+        role = "sales_staff"
+    elif nv["ChucVu"] == "Tiếp tân":
+        role = "receptionist_staff"
+    elif nv["ChucVu"] == "Bác sĩ thú y":
+        role = "veterinarian_staff"
 
     token = create_access_token(
         {"sub": nv["MaNV"], "role": role, "maCN": nv["MaCN"], "chucvu": nv["ChucVu"]},

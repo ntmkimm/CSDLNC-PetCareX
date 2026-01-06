@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic'
 import { Card, Row, Col, Table, Button, InputNumber, message, Space, Tag, Typography } from 'antd'
 import { api } from '../lib/api'
 import { useRouter } from 'next/router'
-import { getAuth } from '../lib/auth'
+import { getAuth, clearToken } from '../lib/auth'
 
 const BranchBar = dynamic(() => import('../components/charts/BranchBar'), { ssr: false })
 const MembershipPie = dynamic(() => import('../components/charts/MembershipPie'), { ssr: false })
@@ -173,12 +173,28 @@ export default function CompanyPage() {
   // Nếu chưa access thì return UI rỗng (tránh flash dữ liệu)
   if (!canAccess) return null
 
+  const logout = () => {
+    clearToken()
+    message.success('Đã đăng xuất')
+    router.replace('/')
+  }
+
   return (
     <div style={{ padding: 16 }}>
       <Space style={{ marginBottom: 12 }} wrap>
         <Tag color="blue">{role}</Tag>
-        {maCNFromToken ? <Tag color="purple">MaCN: {maCNFromToken}</Tag> : null}
-        <Button onClick={() => router.push('/')}>Về Home</Button>
+
+        {maCNFromToken && (
+          <Tag color="purple">MaCN: {maCNFromToken}</Tag>
+        )}
+
+        <Button onClick={() => router.push('/')}>
+          Về Home
+        </Button>
+
+        <Button danger onClick={logout}>
+          Logout
+        </Button>
       </Space>
 
       <Row gutter={[16, 16]}>

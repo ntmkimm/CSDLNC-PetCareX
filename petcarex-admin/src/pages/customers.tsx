@@ -4,7 +4,7 @@ import { Card, Table, Space, Input, Button, Form, Modal, message, Popconfirm, Ty
 import type { ColumnsType } from 'antd/es/table'
 import { api } from '../lib/api'
 import { useRouter } from 'next/router'
-import { getAuth } from '../lib/auth'
+import { getAuth, clearToken } from '../lib/auth'
 
 type Pet = {
   MaThuCung: string
@@ -194,12 +194,18 @@ export default function CustomersPage() {
     { title: 'Mã gói', dataIndex: 'MaGoi' },
   ]
 
+  const logout = () => {
+      clearToken()
+      message.success('Đã đăng xuất')
+      router.replace('/')
+    }
+
   return (
     <div style={{ padding: 16 }}>
       <Card
         title="Customer – Pets (KH2) & Vaccination History (KH3)"
         extra={
-          <Space>
+          <Space wrap>
             <Input
               placeholder="Nhập MaKH (ví dụ: KH001)"
               value={maKH}
@@ -208,11 +214,21 @@ export default function CustomersPage() {
               style={{ width: 240 }}
               onPressEnter={() => fetchPets()}
             />
-            <Button type="primary" onClick={() => fetchPets()} loading={loadingPets} disabled={isCustomer && !maKH}>
+            <Button
+              type="primary"
+              onClick={() => fetchPets()}
+              loading={loadingPets}
+              disabled={isCustomer && !maKH}
+            >
               Tải danh sách thú cưng
             </Button>
-            {payload?.role ? <Tag color="blue">{payload.role}</Tag> : null}
-            {isCustomer && payload?.sub ? <Tag color="purple">MaKH: {payload.sub}</Tag> : null}
+
+            {payload?.role && <Tag color="blue">{payload.role}</Tag>}
+            {isCustomer && payload?.sub && <Tag color="purple">MaKH: {payload.sub}</Tag>}
+
+            <Button danger onClick={logout}>
+              Logout
+            </Button>
           </Space>
         }
       >

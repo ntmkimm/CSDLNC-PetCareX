@@ -1,576 +1,295 @@
-// src/pages/staff.tsx
 import React from 'react'
-import { Card, Table, message, Space, Input, Button, Form, Modal, DatePicker, Typography, InputNumber, Tabs, Tag, Spin } from 'antd'
+import {
+  Card, Table, message, Space, Input, Button, Form, Modal,
+  DatePicker, Typography, InputNumber, Tabs, Tag, Spin,
+} from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { Dayjs } from 'dayjs'
 import { api } from '../lib/api'
 import { useRouter } from 'next/router'
-import { getAuth } from '../lib/auth'
+import { getAuth, clearToken } from '../lib/auth'
 
 type AnyRow = Record<string, any>
+type AuthState = ReturnType<typeof getAuth>
 
-function getErrMsg(e: any) {
-  return e?.response?.data?.detail ?? e?.message ?? 'Có lỗi xảy ra'
+const ROLE_NV: Record<string, string[]> = {
+  branch_manager: ['nv1','nv2','nv3','nv4','nv5','nv6','nv7','nv8'],
+  sales_staff: ['nv1','nv6'],
+  veterinarian_staff: ['nv4','nv5'],
+  receptionist_staff: ['nv1','nv2','nv6'],
 }
 
 function toDateStr(d?: Dayjs | null) {
   return d ? d.format('YYYY-MM-DD') : ''
 }
-
-type AuthState = ReturnType<typeof getAuth>
+function getErrMsg(e: any) {
+  return e?.response?.data?.detail ?? e?.message ?? 'Có lỗi xảy ra'
+}
 
 export default function StaffPage() {
   const router = useRouter()
-
-  // IMPORTANT: auth=null để SSR + first client render giống nhau (tránh hydration mismatch)
   const [auth, setAuth] = React.useState<AuthState | null>(null)
   React.useEffect(() => setAuth(getAuth()), [])
 
-  // Common inputs (auto from token)
   const [maCN, setMaCN] = React.useState('')
   const [maNV, setMaNV] = React.useState('')
   const [date, setDate] = React.useState<Dayjs | null>(dayjs())
 
-  // NV1 create invoice
   const [invForm] = Form.useForm()
-  const [creatingInv, setCreatingInv] = React.useState(false)
+  const [searchForm] = Form.useForm()
+  const [importForm] = Form.useForm()
 
-  // NV2 vaccines
+  const [creatingInv, setCreatingInv] = React.useState(false)
   const [vaccines, setVaccines] = React.useState<AnyRow[]>([])
+  const [vaccModalOpen, setVaccModalOpen] = React.useState(false)
   const [loadingVaccines, setLoadingVaccines] = React.useState(false)
 
-  // NV3 revenue daily
   const [revenueRows, setRevenueRows] = React.useState<AnyRow[]>([])
-  const [loadingRevenue, setLoadingRevenue] = React.useState(false)
-
-  // NV4 schedule vaccinations
   const [vaccSchedRows, setVaccSchedRows] = React.useState<AnyRow[]>([])
-  const [loadingVaccSched, setLoadingVaccSched] = React.useState(false)
-
-  // NV5 schedule exams
   const [examRows, setExamRows] = React.useState<AnyRow[]>([])
-  const [loadingExams, setLoadingExams] = React.useState(false)
-
-  // NV6 search invoices
-  const [searchForm] = Form.useForm()
   const [invoiceRows, setInvoiceRows] = React.useState<AnyRow[]>([])
+  const [inventory, setInventory] = React.useState<{products:AnyRow[];vaccines:AnyRow[]}>({products:[],vaccines:[]})
+
+  const [loadingRevenue, setLoadingRevenue] = React.useState(false)
+  const [loadingVaccSched, setLoadingVaccSched] = React.useState(false)
+  const [loadingExams, setLoadingExams] = React.useState(false)
   const [loadingInvoices, setLoadingInvoices] = React.useState(false)
-
-  // NV7 inventory
-  const [inventory, setInventory] = React.useState<{ products: AnyRow[]; vaccines: AnyRow[] }>({ products: [], vaccines: [] })
   const [loadingInv, setLoadingInv] = React.useState(false)
-
-  // NV8 import stock
-  const [importForm] = Form.useForm()
   const [importing, setImporting] = React.useState(false)
 
-  // Modals
-  const [vaccModalOpen, setVaccModalOpen] = React.useState(false)
-
-  // ====== Guard + auto-fill from JWT ======
-  const warnedRef = React.useRef(false)
-
   React.useEffect(() => {
-    if (auth === null) return
-
-    const payload: any = auth.payload
-    const role = payload?.role
-    const canAccess = !!auth.token && !!payload && !auth.isExpired && (role === 'staff' || role === 'branch_manager')
-
-    if (!canAccess) {
-      if (!warnedRef.current) {
-        warnedRef.current = true
-        message.info(!auth.token || auth.isExpired ? 'Vui lòng đăng nhập' : 'Không đủ quyền truy cập Staff')
-      }
+    if (!auth) return
+    const p:any = auth.payload
+    if (!auth.token || auth.isExpired) {
+      message.info('Vui lòng đăng nhập')
       router.replace('/')
       return
     }
+    setMaNV(String(p?.sub ?? ''))
+    setMaCN(String(p?.maCN ?? ''))
+  }, [auth, router])
 
-    // Auto MaNV + MaCN
-    const tokenMaNV = payload?.sub ? String(payload.sub) : ''
-    const tokenMaCN = payload?.maCN ? String(payload.maCN) : ''
+  if (!auth) return <Spin style={{ padding: 24 }} />
 
-    if (tokenMaNV && maNV !== tokenMaNV) setMaNV(tokenMaNV)
-    if (tokenMaCN && maCN !== tokenMaCN) setMaCN(tokenMaCN)
-  }, [auth, router, maCN, maNV])
+  const role = auth.payload?.role
+  const allowedNV = ROLE_NV[role] ?? []
 
-  if (auth === null) {
-    return (
-      <div style={{ padding: 16 }}>
-        <Spin />
-      </div>
-    )
-  }
+  /* ================= HANDLERS ================= */
 
-  const payload: any = auth.payload
-  const role = payload?.role
-  const canAccess = !!auth.token && !!payload && !auth.isExpired && (role === 'staff' || role === 'branch_manager')
-  if (!canAccess) return null
-
-  // =========================
-  // Handlers
-  // =========================
-
-  // NV1
-  const createInvoice = async (vals: any) => {
-    if (!maNV.trim()) return message.warning('Thiếu MaNV trong token (sub)')
+  const createInvoice = async (v:any) => {
     setCreatingInv(true)
     try {
-      const res = await api.post('/staff/invoices', null, {
-        params: {
-          ma_hoa_don: vals.ma_hoa_don?.trim(),
-          ma_kh: vals.ma_kh?.trim(),
-          hinh_thuc: vals.hinh_thuc?.trim(),
-          ma_nv: maNV.trim(), // AUTO from token
-        },
+      await api.post('/staff/invoices', null, {
+        params: { ...v, ma_nv: maNV },
       })
-      message.success(`Đã tạo hoá đơn: ${res.data?.MaHoaDon ?? vals.ma_hoa_don}`)
+      message.success('Đã tạo hoá đơn')
       invForm.resetFields()
-    } catch (e) {
-      message.error(getErrMsg(e))
-    } finally {
-      setCreatingInv(false)
-    }
+    } catch (e) { message.error(getErrMsg(e)) }
+    finally { setCreatingInv(false) }
   }
 
-  // NV2
   const loadVaccines = async () => {
     setLoadingVaccines(true)
     try {
-      const res = await api.get('/staff/vaccines')
-      setVaccines(res.data?.items ?? [])
+      const r = await api.get('/staff/vaccines')
+      setVaccines(r.data?.items ?? [])
       setVaccModalOpen(true)
-    } catch (e) {
-      message.error(getErrMsg(e))
-    } finally {
-      setLoadingVaccines(false)
-    }
+    } catch (e) { message.error(getErrMsg(e)) }
+    finally { setLoadingVaccines(false) }
   }
 
-  // NV3
   const loadRevenueDaily = async () => {
-    const cn = maCN.trim()
-    const d = toDateStr(date)
-    if (!cn) return message.warning('Thiếu MaCN trong token')
-    if (!d) return message.warning('Chọn ngày')
     setLoadingRevenue(true)
     try {
-      const res = await api.get('/staff/reports/revenue/daily', { params: { date: d, ma_cn: cn } })
-      setRevenueRows(res.data?.items ?? [])
-    } catch (e) {
-      message.error(getErrMsg(e))
-    } finally {
-      setLoadingRevenue(false)
-    }
+      const r = await api.get('/staff/reports/revenue/daily', {
+        params: { date: toDateStr(date), ma_cn: maCN },
+      })
+      setRevenueRows(r.data?.items ?? [])
+    } catch (e) { message.error(getErrMsg(e)) }
+    finally { setLoadingRevenue(false) }
   }
 
-  // NV4
   const loadVaccinationsSchedule = async () => {
-    const cn = maCN.trim()
-    const d = toDateStr(date)
-    if (!cn) return message.warning('Thiếu MaCN trong token')
-    if (!d) return message.warning('Chọn ngày')
     setLoadingVaccSched(true)
     try {
-      const res = await api.get('/staff/schedule/vaccinations', { params: { date: d, ma_cn: cn } })
-      setVaccSchedRows(res.data?.items ?? [])
-    } catch (e) {
-      message.error(getErrMsg(e))
-    } finally {
-      setLoadingVaccSched(false)
-    }
+      const r = await api.get('/staff/schedule/vaccinations', {
+        params: { date: toDateStr(date), ma_cn: maCN },
+      })
+      setVaccSchedRows(r.data?.items ?? [])
+    } catch (e) { message.error(getErrMsg(e)) }
+    finally { setLoadingVaccSched(false) }
   }
 
-  // NV5
   const loadExamsSchedule = async () => {
-    const cn = maCN.trim()
-    const d = toDateStr(date)
-    if (!cn) return message.warning('Thiếu MaCN trong token')
-    if (!d) return message.warning('Chọn ngày')
     setLoadingExams(true)
     try {
-      const res = await api.get('/staff/schedule/exams', { params: { date: d, ma_cn: cn } })
-      setExamRows(res.data?.items ?? [])
-    } catch (e) {
-      message.error(getErrMsg(e))
-    } finally {
-      setLoadingExams(false)
-    }
+      const r = await api.get('/staff/schedule/exams', {
+        params: { date: toDateStr(date), ma_cn: maCN },
+      })
+      setExamRows(r.data?.items ?? [])
+    } catch (e) { message.error(getErrMsg(e)) }
+    finally { setLoadingExams(false) }
   }
 
-  // NV6
-  const searchInvoices = async (vals: any) => {
-    const cn = maCN.trim()
-    if (!cn) return message.warning('Thiếu MaCN trong token')
-    const from = vals.from_date ? dayjs(vals.from_date).format('YYYY-MM-DD') : ''
-    const to = vals.to_date ? dayjs(vals.to_date).format('YYYY-MM-DD') : ''
-    if (!from || !to) return message.warning('Chọn from_date và to_date')
-
+  const searchInvoices = async (v:any) => {
     setLoadingInvoices(true)
     try {
-      const res = await api.get('/staff/invoices', {
+      const r = await api.get('/staff/invoices', {
         params: {
-          from_date: from,
-          to_date: to,
-          ma_cn: cn,
-          ma_kh: vals.ma_kh?.trim() || undefined,
+          ma_cn: maCN,
+          from_date: dayjs(v.from_date).format('YYYY-MM-DD'),
+          to_date: dayjs(v.to_date).format('YYYY-MM-DD'),
+          ma_kh: v.ma_kh || undefined,
         },
       })
-      setInvoiceRows(res.data?.items ?? [])
-    } catch (e) {
-      message.error(getErrMsg(e))
-    } finally {
-      setLoadingInvoices(false)
-    }
+      setInvoiceRows(r.data?.items ?? [])
+    } catch (e) { message.error(getErrMsg(e)) }
+    finally { setLoadingInvoices(false) }
   }
 
-  // NV7
   const loadInventory = async () => {
-    const cn = maCN.trim()
-    if (!cn) return message.warning('Thiếu MaCN trong token')
     setLoadingInv(true)
     try {
-      const res = await api.get('/staff/inventory', { params: { ma_cn: cn } })
-      setInventory({
-        products: res.data?.products ?? [],
-        vaccines: res.data?.vaccines ?? [],
-      })
-    } catch (e) {
-      message.error(getErrMsg(e))
-    } finally {
-      setLoadingInv(false)
-    }
+      const r = await api.get('/staff/inventory', { params: { ma_cn: maCN } })
+      setInventory(r.data)
+    } catch (e) { message.error(getErrMsg(e)) }
+    finally { setLoadingInv(false) }
   }
 
-  // NV8
-  const importStock = async (vals: any) => {
-    const cn = maCN.trim()
-    if (!cn) return message.warning('Thiếu MaCN trong token')
+  const importStock = async (v:any) => {
     setImporting(true)
     try {
       await api.post('/staff/inventory/products/import', null, {
-        params: {
-          ma_cn: cn,
-          ma_sp: vals.ma_sp?.trim(),
-          so_luong: vals.so_luong,
-        },
+        params: { ma_cn: maCN, ...v },
       })
-      message.success('Đã nhập tồn kho')
+      message.success('Đã nhập kho')
       importForm.resetFields()
       loadInventory()
-    } catch (e) {
-      message.error(getErrMsg(e))
-    } finally {
-      setImporting(false)
-    }
+    } catch (e) { message.error(getErrMsg(e)) }
+    finally { setImporting(false) }
   }
 
-  // =========================
-  // Columns
-  // =========================
+  /* ================= COLUMNS ================= */
 
-  const vaccineCols: ColumnsType<AnyRow> = [
-    { title: 'Mã VC', dataIndex: 'MaVC' },
-    { title: 'Tên VC', dataIndex: 'TenVC' },
-    { title: 'Đơn giá', dataIndex: 'DonGia', align: 'right' },
-    { title: 'Mô tả', dataIndex: 'MoTa' },
-  ]
+  const simpleCols = (keys:string[]):ColumnsType<any> =>
+    keys.map(k => ({ title:k, dataIndex:k }))
 
-  const revenueCols: ColumnsType<AnyRow> = [
-    { title: 'Ngày', dataIndex: 'Ngay' },
-    { title: 'Doanh thu', dataIndex: 'DoanhThu', align: 'right', render: (v) => (v == null ? '' : Number(v).toLocaleString('vi-VN')) },
-  ]
+  /* ================= NV BLOCKS ================= */
 
-  const vaccSchedCols: ColumnsType<AnyRow> = [
-    { title: 'Mã phiên', dataIndex: 'MaPhien' },
-    { title: 'Mã thú cưng', dataIndex: 'MaThuCung' },
-    { title: 'Ngày tiêm', dataIndex: 'NgayTiem' },
-    { title: 'Mã VC', dataIndex: 'MaVC' },
-    { title: 'Tên VC', dataIndex: 'TenVC' },
-    { title: 'Số liều', dataIndex: 'SoLieu', align: 'right' },
-  ]
+  const NV_MAP: Record<string, any> = {
+    nv1: {
+      key:'nv1', label:'NV1 - Tạo hoá đơn',
+      children: (
+        <Card>
+          <Form form={invForm} layout="inline" onFinish={createInvoice}>
+            <Form.Item name="ma_hoa_don"><Input placeholder="MaHD"/></Form.Item>
+            <Form.Item name="ma_kh"><Input placeholder="MaKH"/></Form.Item>
+            <Form.Item name="hinh_thuc"><Input placeholder="HTTT"/></Form.Item>
+            <Button type="primary" htmlType="submit" loading={creatingInv}>Tạo</Button>
+          </Form>
+        </Card>
+      ),
+    },
 
-  const examCols: ColumnsType<AnyRow> = [
-    { title: 'Mã phiên', dataIndex: 'MaPhien' },
-    { title: 'Mã thú cưng', dataIndex: 'MaThuCung' },
-    { title: 'Bác sĩ', dataIndex: 'BacSiPhuTrach' },
-    { title: 'Chẩn đoán', dataIndex: 'ChanDoan' },
-    { title: 'Ngày tái khám', dataIndex: 'NgayTaiKham' },
-  ]
+    nv2: {
+      key:'nv2', label:'NV2 - Vaccine',
+      children: (
+        <Card extra={<Button onClick={loadVaccines} loading={loadingVaccines}>Tải</Button>}>
+          <Modal open={vaccModalOpen} footer={null} onCancel={()=>setVaccModalOpen(false)}>
+            <Table dataSource={vaccines} columns={simpleCols(['MaVC','TenVC','DonGia'])}/>
+          </Modal>
+        </Card>
+      ),
+    },
 
-  const invoiceCols: ColumnsType<AnyRow> = [
-    { title: 'Mã HĐ', dataIndex: 'MaHoaDon' },
-    { title: 'Mã KH', dataIndex: 'MaKH' },
-    { title: 'Ngày lập', dataIndex: 'NgayLap' },
-    { title: 'Nhân viên lập', dataIndex: 'NhanVienLap' },
-    { title: 'HTTT', dataIndex: 'HinhThucThanhToan' },
-    { title: 'Khuyến mãi', dataIndex: 'KhuyenMai', align: 'right' },
-    { title: 'Tổng tiền', dataIndex: 'TongTien', align: 'right', render: (v) => (v == null ? '' : Number(v).toLocaleString('vi-VN')) },
-  ]
+    nv3: {
+      key:'nv3', label:'NV3 - Doanh thu',
+      children: (
+        <Card extra={<Button onClick={loadRevenueDaily} loading={loadingRevenue}>Xem</Button>}>
+          <Table dataSource={revenueRows} columns={simpleCols(['Ngay','DoanhThu'])}/>
+        </Card>
+      ),
+    },
 
-  const invProductCols: ColumnsType<AnyRow> = [
-    { title: 'Mã SP', dataIndex: 'MaSP' },
-    { title: 'Tên SP', dataIndex: 'TenSP' },
-    { title: 'Loại', dataIndex: 'LoaiSP' },
-    { title: 'Đơn giá', dataIndex: 'DonGia', align: 'right', render: (v) => (v == null ? '' : Number(v).toLocaleString('vi-VN')) },
-    { title: 'Tồn kho', dataIndex: 'SoLuongTonKho', align: 'right' },
-  ]
+    nv4: {
+      key:'nv4', label:'NV4 - Lịch tiêm',
+      children: (
+        <Card extra={<Button onClick={loadVaccinationsSchedule} loading={loadingVaccSched}>Tải</Button>}>
+          <Table dataSource={vaccSchedRows} columns={simpleCols(['MaPhien','TenVC','SoLieu'])}/>
+        </Card>
+      ),
+    },
 
-  const invVaccineCols: ColumnsType<AnyRow> = [
-    { title: 'Mã VC', dataIndex: 'MaVC' },
-    { title: 'Tên VC', dataIndex: 'TenVC' },
-    { title: 'Đơn giá', dataIndex: 'DonGia', align: 'right', render: (v) => (v == null ? '' : Number(v).toLocaleString('vi-VN')) },
-    { title: 'Tồn kho', dataIndex: 'SoLuongTonKho', align: 'right' },
-  ]
+    nv5: {
+      key:'nv5', label:'NV5 - Lịch khám',
+      children: (
+        <Card extra={<Button onClick={loadExamsSchedule} loading={loadingExams}>Tải</Button>}>
+          <Table dataSource={examRows} columns={simpleCols(['MaPhien','ChanDoan'])}/>
+        </Card>
+      ),
+    },
+
+    nv6: {
+      key:'nv6', label:'NV6 - Tra cứu hoá đơn',
+      children: (
+        <Card>
+          <Form form={searchForm} layout="inline" onFinish={searchInvoices}>
+            <Form.Item name="from_date"><DatePicker/></Form.Item>
+            <Form.Item name="to_date"><DatePicker/></Form.Item>
+            <Form.Item name="ma_kh"><Input placeholder="MaKH"/></Form.Item>
+            <Button htmlType="submit" loading={loadingInvoices}>Tìm</Button>
+          </Form>
+          <Table dataSource={invoiceRows} columns={simpleCols(['MaHoaDon','TongTien'])}/>
+        </Card>
+      ),
+    },
+
+    nv7: {
+      key:'nv7', label:'NV7 - Tồn kho',
+      children: (
+        <Card extra={<Button onClick={loadInventory} loading={loadingInv}>Tải</Button>}>
+          <Table dataSource={inventory.products} columns={simpleCols(['MaSP','SoLuongTonKho'])}/>
+        </Card>
+      ),
+    },
+
+    nv8: {
+      key:'nv8', label:'NV8 - Nhập kho',
+      children: (
+        <Card>
+          <Form form={importForm} layout="inline" onFinish={importStock}>
+            <Form.Item name="ma_sp"><Input placeholder="MaSP"/></Form.Item>
+            <Form.Item name="so_luong"><InputNumber min={1}/></Form.Item>
+            <Button htmlType="submit" loading={importing}>Nhập</Button>
+          </Form>
+        </Card>
+      ),
+    },
+  }
+
+  const logout = () => {
+    clearToken()
+    message.success('Đã đăng xuất')
+    router.replace('/')
+  }
 
   return (
     <div style={{ padding: 16 }}>
       <Card
-        title="Staff Console (NV1–NV8)"
+        title="Staff Console"
         extra={
           <Space wrap>
             <Tag color="blue">{role}</Tag>
-            {maNV ? <Tag color="geekblue">MaNV: {maNV}</Tag> : null}
-            {maCN ? <Tag color="purple">MaCN: {maCN}</Tag> : null}
+            <Tag color="geekblue">MaNV:{maNV}</Tag>
+            <Tag color="purple">MaCN:{maCN}</Tag>
             <DatePicker value={date} onChange={setDate} />
+            <Button danger onClick={logout}>
+              Logout
+            </Button>
           </Space>
         }
       >
-        <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-          MaNV lấy từ <b>token.sub</b>, MaCN lấy từ <b>token.maCN</b>. Trang này không cần nhập tay nữa.
-        </Typography.Paragraph>
-
-        <Tabs
-          items={[
-            {
-              key: 'nv1',
-              label: 'NV1 - Tạo hoá đơn',
-              children: (
-                <Card size="small" title="POST /staff/invoices">
-                  <Form form={invForm} layout="vertical" onFinish={createInvoice}>
-                    <Space wrap>
-                      <Form.Item name="ma_hoa_don" label="MaHoaDon" rules={[{ required: true, message: 'Nhập MaHoaDon' }]}>
-                        <Input style={{ width: 220 }} placeholder="HD001" />
-                      </Form.Item>
-                      <Form.Item name="ma_kh" label="MaKH" rules={[{ required: true, message: 'Nhập MaKH' }]}>
-                        <Input style={{ width: 220 }} placeholder="KH001" />
-                      </Form.Item>
-                      <Form.Item name="hinh_thuc" label="Hình thức thanh toán" rules={[{ required: true, message: 'Nhập hinh_thuc' }]}>
-                        <Input style={{ width: 220 }} placeholder="Cash / Card / ..." />
-                      </Form.Item>
-                    </Space>
-
-                    <Typography.Text type="secondary">
-                      MaNV sẽ tự dùng: <b>{maNV || '(missing token.sub)'}</b>
-                    </Typography.Text>
-
-                    <div style={{ height: 8 }} />
-
-                    <Button type="primary" htmlType="submit" loading={creatingInv} disabled={!maNV}>
-                      Tạo hoá đơn
-                    </Button>
-                  </Form>
-                </Card>
-              ),
-            },
-            {
-              key: 'nv2',
-              label: 'NV2 - Vaccine',
-              children: (
-                <Card
-                  size="small"
-                  title="GET /staff/vaccines"
-                  extra={
-                    <Button onClick={loadVaccines} loading={loadingVaccines}>
-                      Tải danh sách vaccine
-                    </Button>
-                  }
-                >
-                  <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-                    Danh sách vaccine sẽ mở trong modal để đỡ dài trang.
-                  </Typography.Paragraph>
-
-                  <Modal open={vaccModalOpen} onCancel={() => setVaccModalOpen(false)} footer={null} width={900} title="Danh sách vaccine">
-                    <Table rowKey={(r) => r.MaVC ?? r.id} dataSource={vaccines} columns={vaccineCols} pagination={{ pageSize: 10 }} />
-                  </Modal>
-                </Card>
-              ),
-            },
-            {
-              key: 'nv3',
-              label: 'NV3 - Doanh thu ngày',
-              children: (
-                <Card
-                  size="small"
-                  title="GET /staff/reports/revenue/daily"
-                  extra={
-                    <Button type="primary" onClick={loadRevenueDaily} loading={loadingRevenue} disabled={!maCN}>
-                      Xem doanh thu
-                    </Button>
-                  }
-                >
-                  <Table rowKey={(r, idx) => `${r.Ngay ?? 'd'}-${idx}`} loading={loadingRevenue} dataSource={revenueRows} columns={revenueCols} pagination={false} />
-                </Card>
-              ),
-            },
-            {
-              key: 'nv4',
-              label: 'NV4 - Lịch tiêm',
-              children: (
-                <Card
-                  size="small"
-                  title="GET /staff/schedule/vaccinations"
-                  extra={
-                    <Button type="primary" onClick={loadVaccinationsSchedule} loading={loadingVaccSched} disabled={!maCN}>
-                      Tải lịch tiêm
-                    </Button>
-                  }
-                >
-                  <Table
-                    rowKey={(r, idx) => `${r.MaPhien ?? 'ph'}-${r.MaVC ?? 'vc'}-${idx}`}
-                    loading={loadingVaccSched}
-                    dataSource={vaccSchedRows}
-                    columns={vaccSchedCols}
-                    pagination={{ pageSize: 10 }}
-                  />
-                </Card>
-              ),
-            },
-            {
-              key: 'nv5',
-              label: 'NV5 - Lịch khám',
-              children: (
-                <Card
-                  size="small"
-                  title="GET /staff/schedule/exams"
-                  extra={
-                    <Button type="primary" onClick={loadExamsSchedule} loading={loadingExams} disabled={!maCN}>
-                      Tải lịch khám
-                    </Button>
-                  }
-                >
-                  <Table rowKey={(r, idx) => `${r.MaPhien ?? 'ph'}-${idx}`} loading={loadingExams} dataSource={examRows} columns={examCols} pagination={{ pageSize: 10 }} />
-                </Card>
-              ),
-            },
-            {
-              key: 'nv6',
-              label: 'NV6 - Tra cứu hoá đơn',
-              children: (
-                <Card size="small" title="GET /staff/invoices">
-                  <Form
-                    form={searchForm}
-                    layout="inline"
-                    onFinish={searchInvoices}
-                    initialValues={{ from_date: dayjs().startOf('month'), to_date: dayjs() }}
-                  >
-                    <Form.Item name="from_date" label="From" rules={[{ required: true, message: 'Chọn from_date' }]}>
-                      <DatePicker />
-                    </Form.Item>
-                    <Form.Item name="to_date" label="To" rules={[{ required: true, message: 'Chọn to_date' }]}>
-                      <DatePicker />
-                    </Form.Item>
-                    <Form.Item name="ma_kh" label="MaKH (optional)">
-                      <Input placeholder="KH001" style={{ width: 180 }} />
-                    </Form.Item>
-                    <Form.Item>
-                      <Button type="primary" htmlType="submit" loading={loadingInvoices} disabled={!maCN}>
-                        Tìm
-                      </Button>
-                    </Form.Item>
-                  </Form>
-
-                  <div style={{ height: 12 }} />
-
-                  <Table
-                    rowKey={(r, idx) => `${r.MaHoaDon ?? 'hd'}-${idx}`}
-                    loading={loadingInvoices}
-                    dataSource={invoiceRows}
-                    columns={invoiceCols}
-                    pagination={{ pageSize: 10 }}
-                    scroll={{ x: 900 }}
-                  />
-                </Card>
-              ),
-            },
-            {
-              key: 'nv7',
-              label: 'NV7 - Tồn kho',
-              children: (
-                <Card
-                  size="small"
-                  title="GET /staff/inventory"
-                  extra={
-                    <Button type="primary" onClick={loadInventory} loading={loadingInv} disabled={!maCN}>
-                      Tải tồn kho
-                    </Button>
-                  }
-                >
-                  <Tabs
-                    items={[
-                      {
-                        key: 'p',
-                        label: 'Sản phẩm',
-                        children: (
-                          <Table
-                            rowKey={(r, idx) => `${r.MaSP ?? 'sp'}-${idx}`}
-                            loading={loadingInv}
-                            dataSource={inventory.products}
-                            columns={invProductCols}
-                            pagination={{ pageSize: 10 }}
-                          />
-                        ),
-                      },
-                      {
-                        key: 'v',
-                        label: 'Vaccine',
-                        children: (
-                          <Table
-                            rowKey={(r, idx) => `${r.MaVC ?? 'vc'}-${idx}`}
-                            loading={loadingInv}
-                            dataSource={inventory.vaccines}
-                            columns={invVaccineCols}
-                            pagination={{ pageSize: 10 }}
-                          />
-                        ),
-                      },
-                    ]}
-                  />
-                </Card>
-              ),
-            },
-            {
-              key: 'nv8',
-              label: 'NV8 - Nhập kho SP',
-              children: (
-                <Card size="small" title="POST /staff/inventory/products/import">
-                  <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-                    MaCN lấy từ token: <b>{maCN || '(missing token.maCN)'}</b>
-                  </Typography.Paragraph>
-
-                  <Form form={importForm} layout="inline" onFinish={importStock}>
-                    <Form.Item name="ma_sp" rules={[{ required: true, message: 'Nhập MaSP' }]}>
-                      <Input placeholder="MaSP" style={{ width: 200 }} />
-                    </Form.Item>
-                    <Form.Item name="so_luong" rules={[{ required: true, message: 'Nhập số lượng' }]}>
-                      <InputNumber min={1} placeholder="Số lượng" style={{ width: 140 }} />
-                    </Form.Item>
-                    <Form.Item>
-                      <Button type="primary" htmlType="submit" loading={importing} disabled={!maCN}>
-                        Nhập kho
-                      </Button>
-                    </Form.Item>
-                    <Form.Item>
-                      <Button onClick={loadInventory} loading={loadingInv} disabled={!maCN}>
-                        Refresh tồn kho
-                      </Button>
-                    </Form.Item>
-                  </Form>
-                </Card>
-              ),
-            },
-          ]}
-        />
+        <Tabs items={allowedNV.map(k => NV_MAP[k])}/>
       </Card>
     </div>
   )

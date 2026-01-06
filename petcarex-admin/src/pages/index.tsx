@@ -1,18 +1,19 @@
-// src/pages/index.tsx
 import React from 'react'
 import { useRouter } from 'next/router'
-import { Card, Row, Col, Button, Typography, Tabs, Form, Input, Space, message, Tag, Spin } from 'antd'
+import {
+  Card, Button, Typography, Tabs,
+  Form, Input, Space, message, Tag, Spin,
+} from 'antd'
 import { api } from '../lib/api'
 import { clearToken, getAuth, setToken } from '../lib/auth'
 
 const { Title, Text } = Typography
-
 type AuthState = ReturnType<typeof getAuth>
 
 export default function Home() {
   const router = useRouter()
 
-  // IMPORTANT: null để SSR và first client render giống nhau
+  // null để SSR + first client render giống nhau
   const [auth, setAuthState] = React.useState<AuthState | null>(null)
   const [loading, setLoading] = React.useState(false)
 
@@ -20,11 +21,38 @@ export default function Home() {
     setAuthState(getAuth())
   }, [])
 
-  // đồng bộ sau login/logout
-  const refreshAuth = () => setAuthState(getAuth())
+  /* ================= REDIRECT LOGIC ================= */
+
+  const redirectByRole = (payload: any) => {
+    const role = payload?.role
+
+    if (role === 'customer') {
+      router.replace('/customers')
+      return
+    }
+
+    if (role === 'branch_manager') {
+      router.replace('/company')
+      return
+    }
+
+    if (['staff', 'sales_staff', 'veterinarian_staff', 'receptionist_staff'].includes(role)) {
+      router.replace('/staff')
+      return
+    }
+
+    router.replace('/')
+  }
+
+  // nếu đã login mà vào lại /
+  React.useEffect(() => {
+    if (!auth) return
+    if (auth.token && auth.payload && !auth.isExpired) {
+      redirectByRole(auth.payload)
+    }
+  }, [auth])
 
   if (auth === null) {
-    // SSR + first paint đều giống nhau => không hydration mismatch
     return (
       <div style={{ padding: 24 }}>
         <Spin />
@@ -34,8 +62,8 @@ export default function Home() {
 
   const payload = auth.payload
   const loggedIn = !!auth.token && !!payload && !auth.isExpired
-  const canStaff = loggedIn && (payload?.role === 'staff' || payload?.role === 'branch_manager')
-  const canCustomer = loggedIn && (payload?.role === 'customer' || canStaff)
+
+  /* ================= LOGIN HANDLERS ================= */
 
   const doCustomerLogin = async (vals: any) => {
     setLoading(true)
@@ -45,9 +73,11 @@ export default function Home() {
       })
       const token = res.data?.access_token
       if (!token) throw new Error('No token returned')
+
       setToken(token)
-      refreshAuth()
+      const nextAuth = getAuth()
       message.success('Customer login OK')
+      redirectByRole(nextAuth.payload)
     } catch (e: any) {
       message.error(e?.response?.data?.detail ?? e?.message ?? 'Login failed')
     } finally {
@@ -63,9 +93,11 @@ export default function Home() {
       })
       const token = res.data?.access_token
       if (!token) throw new Error('No token returned')
+
       setToken(token)
-      refreshAuth()
+      const nextAuth = getAuth()
       message.success('Staff login OK')
+      redirectByRole(nextAuth.payload)
     } catch (e: any) {
       message.error(e?.response?.data?.detail ?? e?.message ?? 'Login failed')
     } finally {
@@ -75,9 +107,11 @@ export default function Home() {
 
   const logout = () => {
     clearToken()
-    refreshAuth()
+    setAuthState(getAuth())
     message.success('Đã đăng xuất')
   }
+
+  /* ================= UI ================= */
 
   return (
     <div style={{ padding: 24 }}>
@@ -133,29 +167,13 @@ export default function Home() {
             <Text>
               <b>sub:</b> {payload?.sub}
             </Text>
-            {(payload as any)?.maCN ? <Tag color="purple">MaCN: {(payload as any).maCN}</Tag> : null}
+            {(payload as any)?.maCN ? (
+              <Tag color="purple">MaCN: {(payload as any).maCN}</Tag>
+            ) : null}
             <Button danger onClick={logout}>Logout</Button>
           </Space>
         </Card>
       )}
-
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} sm={12} md={8}>
-          <Card title="Company" extra={<Button type="link" disabled={!canStaff} onClick={() => router.push('/company')}>Mở</Button>}>
-            Bảng điều khiển company.
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={8}>
-          <Card title="Staff" extra={<Button type="link" disabled={!canStaff} onClick={() => router.push('/staff')}>Mở</Button>}>
-            NV1–NV8.
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={8}>
-          <Card title="Customers" extra={<Button type="link" disabled={!canCustomer} onClick={() => router.push('/customers')}>Mở</Button>}>
-            Pets + vaccination history.
-          </Card>
-        </Col>
-      </Row>
     </div>
   )
 }
