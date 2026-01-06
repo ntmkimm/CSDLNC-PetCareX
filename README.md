@@ -1,7 +1,10 @@
+```
 conda create -n csdlnc python=3.10 -y
 conda activate csdlnc
 pip install -r requirements.txt
+```
 
+```text
 PetCareX/
 ├─ app/                    # BACKEND
 │  ├─ main.py
@@ -30,6 +33,7 @@ PetCareX/
 ├─ petcarex-admin/           # FRONTEND
 └─ README.md
 
+```
 
 ```
 uvicorn app.main:app --reload
