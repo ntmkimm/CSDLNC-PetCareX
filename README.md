@@ -6,8 +6,7 @@ PetCareX/
 ├─ app/                    # BACKEND FOLDER
 │  ├─ main.py
 │  ├─ core/
-│  │  ├─ config.py          # đọc .env
-│  │  └─ security.py        # JWT + hash password
+│  │  └─ config.py          # config project
 │  ├─ db/
 |  │  ├─ session.py         # SQLAlchemy engine/session
 │  │  └─ migrate.py         # tạo DB + chạy *.sql trong migrations/
@@ -19,15 +18,21 @@ PetCareX/
 │  │    ├─ customer.py     # KH1-KH7
 │  │    ├─ staff.py        # NV1-NV8
 │  │    ├─ branch.py       # CN1-CN9
-│  │    └─  company.py      # CT1-CT8
-│  ├─ schemas/              # Pydantic request/response
+│  │    └─ company.py      # CT1-CT8
 │  └─ services/             # business logic gọi SQL / stored procedure
+│       ├─ db_utils.py
+│       ├─ customer_services.py     # KH1-KH7
+│       ├─ staff_service.py        # NV1-NV8
+│       ├─ branch_service.py       # CN1-CN9
+│       └─ company_service.py      # CT1-CT8
 ├─ migrations/
 │  ├─ 000_base.sql          # file schema bạn đang có
 │  ├─ 001_logic.sql         # function/procedure/trigger (nếu có)
 │  └─  002_seed.sql          # (tuỳ) seed dữ liệu mẫu
-├─ requirements.txt
 ├─ petcarex-admin/           # FRONTEND FRONTEND
+│  ├─ public/
+│  └─ src/
+├─ requirements.txt
 └─ README.md
 
 ```
