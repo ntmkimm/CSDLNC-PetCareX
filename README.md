@@ -35,6 +35,7 @@ PetCareX/
 # HOW TO RUN
 
 ## BACKEND
+FORWARD PORT 8000
 
 ```
 cd PetCareX/
@@ -54,6 +55,7 @@ python -m scripts.drop_db
 Note (please ignore): npx create-next-app@latest petcarex-admin  --ts --app --eslint --src-dir --import-alias "@/*"
 
 ## FRONTEND
+FORWARD PORT 3000
 ```
 cd petcarex-admin
 npm i antd @ant-design/icons axios recharts dayjs
