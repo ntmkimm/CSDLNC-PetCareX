@@ -23,9 +23,9 @@ def create_access_token(payload: dict, expires_minutes: int = 60) -> str:
 @router.post("/login")
 def login(username: str, password: str, db: Session = Depends(get_db)):
     """
-    Login for customer account:
+    DEMO customer login:
     - username = TAIKHOAN_MATKHAU.Tendangnhap
-    - password = plain (compared to hashed in DB)
+    - password = so khớp trực tiếp với Matkhau (plain)
     """
     row = db.execute(
         text("""
@@ -36,7 +36,8 @@ def login(username: str, password: str, db: Session = Depends(get_db)):
         {"u": username},
     ).mappings().first()
 
-    if not row or not pwd_context.verify(password, row["Matkhau"]):
+    # so khớp trực tiếp
+    if not row or (row["Matkhau"] is None) or (password != row["Matkhau"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bad credentials")
 
     token = create_access_token(

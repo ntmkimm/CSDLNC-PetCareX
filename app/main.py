@@ -8,8 +8,10 @@ from app.api.router import api_router
 app = FastAPI(title="PetCareX API")
 
 origins = [
-    "http://localhost:3000",   # Next.js dev
+    "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://172.26.128.1:3000",  # your dev host
+    "http://localhost:3001",     # nếu cần
 ]
 
 app.add_middleware(

@@ -63,6 +63,7 @@ Note (please ignore): npx create-next-app@latest petcarex-admin  --ts --app --es
 FORWARD PORT 3000
 ```
 cd petcarex-admin
+npm install @tanstack/react-query
 npm i antd @ant-design/icons axios recharts dayjs
 npm run dev
 ```
