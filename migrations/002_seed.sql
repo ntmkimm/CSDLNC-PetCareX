@@ -1,136 +1,238 @@
-USE PetCareX;
-GO
+-- CHINHANH (10)
+INSERT INTO CHINHANH VALUES
+('CN00000001',N'PetCareX Q1',N'Q1','0280000001','08:00','20:00'),
+('CN00000002',N'PetCareX Q3',N'Q3','0280000002','08:00','20:00'),
+('CN00000003',N'PetCareX Q5',N'Q5','0280000003','08:00','21:00'),
+('CN00000004',N'PetCareX Q7',N'Q7','0280000004','08:00','21:00'),
+('CN00000005',N'PetCareX Q10',N'Q10','0280000005','08:00','20:00'),
+('CN00000006',N'PetCareX Tân Bình',N'Tân Bình','0280000006','08:00','20:00'),
+('CN00000007',N'PetCareX Gò Vấp',N'Gò Vấp','0280000007','08:00','21:00'),
+('CN00000008',N'PetCareX Bình Thạnh',N'Bình Thạnh','0280000008','08:00','21:00'),
+('CN00000009',N'PetCareX Thủ Đức',N'Thủ Đức','0280000009','08:00','22:00'),
+('CN00000010',N'PetCareX Nhà Bè',N'Nhà Bè','0280000010','08:00','20:00');
 
-SET NOCOUNT ON;
+-- NHANVIEN (10 – đúng vai trò)
+INSERT INTO NHANVIEN VALUES
+('NV00000001',N'Nguyễn An','1988-01-01',N'Nam',N'Nhân viên bán hàng','CN00000001',12000000,500000),
+('NV00000002',N'Trần Bình','1990-02-02',N'Nam',N'Nhân viên bán hàng','CN00000002',12000000,600000),
+('NV00000003',N'Lê Chi','1995-03-03',N'Nữ',N'Tiếp tân','CN00000003',9000000,300000),
+('NV00000004',N'Phạm Dũng','1985-04-04',N'Nam',N'Quản lí','CN00000004',20000000,2000000),
+('NV00000005',N'Hoàng Hà','1987-05-05',N'Nữ',N'Bác sĩ thú y','CN00000005',18000000,1500000),
+('NV00000006',N'Vũ Hùng','1992-06-06',N'Nam',N'Nhân viên bán hàng','CN00000006',12000000,700000),
+('NV00000007',N'Đặng Lan','1993-07-07',N'Nữ',N'Bác sĩ thú y','CN00000007',18000000,1600000),
+('NV00000008',N'Ngô Mai','1996-08-08',N'Nữ',N'Tiếp tân','CN00000008',9000000,400000),
+('NV00000009',N'Bùi Nam','1984-09-09',N'Nam',N'Quản lí','CN00000009',21000000,2200000),
+('NV00000010',N'Phan Phúc','1991-10-10',N'Nam',N'Nhân viên bán hàng','CN00000010',12000000,800000);
 
-BEGIN TRAN;
+-- KHACHHANG + TAIKHOAN (10)
+INSERT INTO KHACHHANG VALUES
+('KH00000001',N'An','111','0901','an@mail.com',N'Nam','1999-01-01',N'Cơ bản',0),
+('KH00000002',N'Bình','112','0902','binh@mail.com',N'Nam','1998-02-02',N'Thân thiết',120),
+('KH00000003',N'Chi','113','0903','chi@mail.com',N'Nữ','2000-03-03',N'VIP',500),
+('KH00000004',N'Dũng','114','0904','dung@mail.com',N'Nam','1997-04-04',N'Cơ bản',30),
+('KH00000005',N'Hà','115','0905','ha@mail.com',N'Nữ','2001-05-05',N'Thân thiết',150),
+('KH00000006',N'Hùng','116','0906','hung@mail.com',N'Nam','1996-06-06',N'VIP',800),
+('KH00000007',N'Lan','117','0907','lan@mail.com',N'Nữ','2002-07-07',N'Cơ bản',0),
+('KH00000008',N'Mai','118','0908','mai@mail.com',N'Nữ','1999-08-08',N'Thân thiết',200),
+('KH00000009',N'Nam','119','0909','nam@mail.com',N'Nam','1995-09-09',N'VIP',600),
+('KH00000010',N'Phúc','120','0910','phuc@mail.com',N'Nam','1994-10-10',N'Cơ bản',50);
 
-------------------------------------------------------------
--- 0) DỮ LIỆU NỀN: CHINHANH
-------------------------------------------------------------
-INSERT INTO CHINHANH (MaCN, TenCN, Diachi, SDT, Giomocua, Giodongcua)
+INSERT INTO TAIKHOAN_MATKHAU VALUES
+('KH00000001','an','123'),
+('KH00000002','binh','123'),
+('KH00000003','chi','123'),
+('KH00000004','dung','123'),
+('KH00000005','ha','123'),
+('KH00000006','hung','123'),
+('KH00000007','lan','123'),
+('KH00000008','mai','123'),
+('KH00000009','nam','123'),
+('KH00000010','phuc','123');
+
+--THUCUNG (10)
+INSERT INTO THUCUNG VALUES
+('TC00000001','KH00000001',N'Bơ',N'Chó',N'Poodle','2022-01-01',N'Đực',N'Khỏe'),
+('TC00000002','KH00000001',N'Mít',N'Mèo',N'ALN','2021-02-02',N'Cái',N'Khỏe'),
+('TC00000003','KH00000002',N'Sữa',N'Mèo',N'Ba Tư','2020-03-03',N'Cái',N'Dị ứng'),
+('TC00000004','KH00000003',N'Gạo',N'Chó',N'Corgi','2019-04-04',N'Đực',N'Khỏe'),
+('TC00000005','KH00000004',N'Nếp',N'Chó',N'Husky','2021-05-05',N'Đực',N'Khỏe'),
+('TC00000006','KH00000005',N'Xôi',N'Mèo',N'Munchkin','2020-06-06',N'Cái',N'Khỏe'),
+('TC00000007','KH00000006',N'Kem',N'Chó',N'Golden','2018-07-07',N'Đực',N'Béo'),
+('TC00000008','KH00000007',N'Trà',N'Mèo',N'Anh','2022-08-08',N'Cái',N'Khỏe'),
+('TC00000009','KH00000008',N'Socola',N'Chó',N'Pug','2021-09-09',N'Đực',N'Khó thở'),
+('TC00000010','KH00000009',N'Bánh',N'Mèo',N'Siam','2020-10-10',N'Cái',N'Khỏe');
+
+-- HOADON (10 – NV bán hàng)
+INSERT INTO HOADON (MaHoaDon,NhanVienLap,MaKH,TongTien,KhuyenMai,HinhThucThanhToan)
 VALUES
-('CN01', N'PetCareX - Quận 1',  N'123 Lê Lợi, Q1, TP.HCM', '0281234567', '08:00', '20:00'),
-('CN02', N'PetCareX - Thủ Đức', N'456 Võ Văn Ngân, Thủ Đức, TP.HCM', '0287654321', '08:00', '21:00');
+('HD00000001','NV00000001','KH00000001',0,0,N'Tiền mặt'),
+('HD00000002','NV00000002','KH00000002',0,5,N'Chuyển khoản'),
+('HD00000003','NV00000006','KH00000003',0,0,N'Tiền mặt'),
+('HD00000004','NV00000010','KH00000004',0,10,N'Chuyển khoản'),
+('HD00000005','NV00000001','KH00000005',0,0,N'Tiền mặt'),
+('HD00000006','NV00000002','KH00000006',0,5,N'Chuyển khoản'),
+('HD00000007','NV00000006','KH00000007',0,0,N'Tiền mặt'),
+('HD00000008','NV00000010','KH00000008',0,0,N'Chuyển khoản'),
+('HD00000009','NV00000001','KH00000009',0,10,N'Tiền mặt'),
+('HD00000010','NV00000002','KH00000010',0,0,N'Chuyển khoản');
 
-------------------------------------------------------------
--- 1) NHANVIEN (tạo đủ các vai trò)
--- Lưu ý trigger HOADON: NhanVienLap phải là "Nhân viên bán hàng"
-------------------------------------------------------------
-INSERT INTO NHANVIEN (MaNV, HoTen, NgaySinh, GioiTinh, ChucVu, MaCN, Luong, Thuong)
-VALUES
-('NV01', N'Nguyễn Minh An', '1995-02-10', N'Nam', N'Nhân viên bán hàng', 'CN01', 12000000, 500000),
-('NV02', N'Lê Thị Bích',     '1998-06-21', N'Nữ',  N'Tiếp tân',          'CN01',  9000000, 300000),
-('NV03', N'Trần Quốc Huy',   '1990-11-05', N'Nam', N'Bác sĩ thú y',       'CN01', 18000000, 1000000),
-('NV04', N'Phạm Gia Khang',  '1988-03-12', N'Nam', N'Quản lí',            'CN02', 20000000, 2000000),
-('NV05', N'Võ Ngọc Mai',     '1996-09-17', N'Nữ',  N'Nhân viên bán hàng', 'CN02', 12000000, 600000),
-('NV06', N'Đặng Hoài Nam',   '1992-01-30', N'Nam', N'Bác sĩ thú y',       'CN02', 18000000, 1200000);
+-- PHIENDICHVU (10)
+INSERT INTO PHIENDICHVU VALUES
+('PD00000001','HD00000001','TC00000001','DV00000001',200000),
+('PD00000002','HD00000002','TC00000002','DV00000002',300000),
+('PD00000003','HD00000003','TC00000003','DV00000003',150000),
+('PD00000004','HD00000004','TC00000004','DV00000004',180000),
+('PD00000005','HD00000005','TC00000005','DV00000005',400000),
+('PD00000006','HD00000006','TC00000006','DV00000006',350000),
+('PD00000007','HD00000007','TC00000007','DV00000007',500000),
+('PD00000008','HD00000008','TC00000008','DV00000008',120000),
+('PD00000009','HD00000009','TC00000009','DV0000000009',220000),
+('PD00000010','HD00000010','TC00000010','DV00000010',160000);
 
-------------------------------------------------------------
--- 2) DICHVU
-------------------------------------------------------------
-INSERT INTO DICHVU (MaDV, TenDV)
-VALUES
-('DV01', N'Khám tổng quát'),
-('DV02', N'Tắm & vệ sinh'),
-('DV03', N'Cắt tỉa lông'),
-('DV04', N'Tư vấn dinh dưỡng');
 
-------------------------------------------------------------
--- 3) SANPHAM
--- Trigger TOATHUOC_OnlyDrug yêu cầu LoaiSP = "Thuốc" khi kê toa
--- Trigger MUAHANG_NotDrug cấm mua Thuốc trong MUAHANG
-------------------------------------------------------------
-INSERT INTO SANPHAM (MaSP, TenSP, LoaiSP, DonGia)
-VALUES
-('SP01', N'Thức ăn hạt cho chó 1kg', N'Đồ ăn', 120000),
-('SP02', N'Cát vệ sinh mèo 5L',     N'Phụ kiện', 90000),
-('SP03', N'Đồ chơi bóng cao su',    N'Đồ chơi', 50000),
-('SP04', N'Amoxicillin 500mg',      N'Thuốc',  3000),
-('SP05', N'Vitamin tổng hợp',       N'Thuốc',  2000);
 
-------------------------------------------------------------
--- 4) VACCINE
-------------------------------------------------------------
-INSERT INTO VACCINE (MaVC, TenVC, NgaySanXuat, LieuLuong, DonGia)
-VALUES
-('VC01', N'Vaccine Dại (Rabies)',      '2025-10-01', 1.0, 250000),
-('VC02', N'Vaccine 5 bệnh (DHPPiL)',   '2025-09-15', 1.0, 450000),
-('VC03', N'Vaccine 3 bệnh mèo (FVRCP)','2025-08-20', 1.0, 400000);
 
-------------------------------------------------------------
--- 5) GOITIEMPHONG + GOITIEMPHONG_VACCINE
-------------------------------------------------------------
-INSERT INTO GOITIEMPHONG (MaGoi, TenGoi, ThoiGian, KhuyenMai)
-VALUES
-('G01', N'Gói cơ bản cho chó', 6, 10),
-('G02', N'Gói cơ bản cho mèo', 6, 10);
 
-INSERT INTO GOITIEMPHONG_VACCINE (MaGoi, MaVC, SoLieu)
-VALUES
-('G01', 'VC01', 1.0),
-('G01', 'VC02', 1.0),
-('G02', 'VC01', 1.0),
-('G02', 'VC03', 1.0);
+-- PHẦN 2 – SEED CÁC BẢNG CÒN LẠI
+-- CUNGCAPDICHVU (≥10)
+INSERT INTO CUNGCAPDICHVU VALUES
+('CN00000001','DV00000001'),
+('CN00000001','DV00000002'),
+('CN00000002','DV00000003'),
+('CN00000002','DV00000004'),
+('CN00000003','DV00000005'),
+('CN00000003','DV00000006'),
+('CN00000004','DV00000007'),
+('CN00000005','DV00000008'),
+('CN00000006','DV00000009'),
+('CN00000007','DV00000010');
 
-------------------------------------------------------------
--- 6) KHO theo chi nhánh
-------------------------------------------------------------
-INSERT INTO CHINHANH_SANPHAM (MaCN, MaSP, SoLuongTonKho)
-VALUES
-('CN01', 'SP01', 100), ('CN01', 'SP02', 80), ('CN01', 'SP03', 50),
-('CN01', 'SP04', 500), ('CN01', 'SP05', 500),
-('CN02', 'SP01', 120), ('CN02', 'SP02', 60), ('CN02', 'SP03', 40),
-('CN02', 'SP04', 400), ('CN02', 'SP05', 450);
+-- KHAMBENH (10 – gắn với PHIENDICHVU + bác sĩ thú y)
+INSERT INTO KHAMBENH VALUES
+('PD00000001','NV00000005',N'Sốt nhẹ',N'Cảm cúm',NULL),
+('PD00000002','NV00000007',N'Chán ăn',N'Rối loạn tiêu hóa',NULL),
+('PD00000003','NV00000005',N'Ngứa da',N'Dị ứng',NULL),
+('PD00000004','NV00000007',N'Ho',N'Viêm hô hấp',NULL),
+('PD00000005','NV00000005',N'Sốt cao',N'Nhiễm trùng',NULL),
+('PD00000006','NV00000007',N'Đau bụng',N'Viêm ruột',NULL),
+('PD00000007','NV00000005',N'Đi khập khiễng',N'Chấn thương nhẹ',NULL),
+('PD00000008','NV00000007',N'Rụng lông',N'Viêm da',NULL),
+('PD00000009','NV00000005',N'Mệt mỏi',N'Suy nhược',NULL),
+('PD00000010','NV00000007',N'Khó thở',N'Bệnh hô hấp',NULL);
 
-INSERT INTO CHINHANH_VACCINE (MaCN, MaVC, SoLuongTonKho)
-VALUES
-('CN01', 'VC01', 60), ('CN01', 'VC02', 40), ('CN01', 'VC03', 30),
-('CN02', 'VC01', 70), ('CN02', 'VC02', 35), ('CN02', 'VC03', 45);
+-- TOATHUOC (10 – CHỈ DÙNG SP LÀ “Thuốc”)
 
-------------------------------------------------------------
--- 7) KHACHHANG + TAIKHOAN_MATKHAU (dùng SEQ_KHACHHANG)
--- Password ở đây chỉ demo (để plain hoặc hash tùy bạn).
--- Nếu bạn muốn hash bcrypt, làm từ app sẽ chuẩn hơn.
-------------------------------------------------------------
-DECLARE @makh1 VARCHAR(10), @makh2 VARCHAR(10);
+-- Thuốc hợp lệ: SP00000006 → SP00000010
 
-DECLARE @n1 INT = NEXT VALUE FOR dbo.SEQ_KHACHHANG;
-SET @makh1 = 'KH' + RIGHT('00000000' + CAST(@n1 AS VARCHAR(8)), 8);
+INSERT INTO TOATHUOC VALUES
+('PD00000001','SP00000006',5),
+('PD00000002','SP00000007',7),
+('PD00000003','SP00000008',3),
+('PD00000004','SP00000009',5),
+('PD00000005','SP00000010',2),
+('PD00000006','SP00000006',4),
+('PD00000007','SP00000007',6),
+('PD00000008','SP00000008',3),
+('PD00000009','SP00000009',4),
+('PD00000010','SP00000010',2);
 
-DECLARE @n2 INT = NEXT VALUE FOR dbo.SEQ_KHACHHANG;
-SET @makh2 = 'KH' + RIGHT('00000000' + CAST(@n2 AS VARCHAR(8)), 8);
 
-INSERT INTO KHACHHANG (MaKH, Hoten, CCCD, SDT, Email, Gioitinh, Ngaysinh, Bac, Tichluy)
-VALUES
-(@makh1, N'Kim',  '012345678901', '0347969423', 'kim@example.com', N'Nam', '2000-04-26', N'Cơ bản', 0),
-(@makh2, N'Lan',  '012345678902', '0912345678', 'lan@example.com', N'Nữ',  '2002-02-14', N'Thân thiết', 150);
+-- Không vi phạm trigger TOATHUOC.
 
--- Demo password plain (không khuyên). Bạn có thể thay bằng hash từ app.
-INSERT INTO TAIKHOAN_MATKHAU (MaKH, Tendangnhap, Matkhau)
-VALUES
-(@makh1, 'kim', '123456'),
-(@makh2, 'lan', '123456');
+--  MUAHANG (10 – TUYỆT ĐỐI KHÔNG DÙNG “Thuốc”)
 
-------------------------------------------------------------
--- 8) THUCUNG
-------------------------------------------------------------
-INSERT INTO THUCUNG (MaThuCung, MaKH, Ten, Loai, Giong, NgaySinh, GioiTinh, TinhTrangSK)
-VALUES
-('TC01', @makh1, N'Bơ',   N'Chó', N'Poodle', '2023-01-10', N'Đực', N'Khỏe'),
-('TC02', @makh1, N'Mít',  N'Mèo', N'Anh lông ngắn', '2022-08-05', N'Cái', N'Dị ứng nhẹ'),
-('TC03', @makh2, N'Sữa',  N'Mèo', N'Ba Tư', '2021-12-20', N'Cái', N'Khỏe');
+-- Hợp lệ: SP00000001 → SP00000005
 
-------------------------------------------------------------
--- 9) HOADON (NhanVienLap phải là Nhân viên bán hàng -> dùng NV01/NV05)
-------------------------------------------------------------
-INSERT INTO HOADON (MaHoaDon, NhanVienLap, MaKH, TongTien, KhuyenMai, HinhThucThanhToan)
-VALUES
-('HD01', 'NV01', @makh1, 0, 0, N'Tiền mặt'),
-('HD02', 'NV05', @makh2, 0, 5, N'Chuyển khoản');
+INSERT INTO MUAHANG VALUES
+('PD00000001','SP00000001',2),
+('PD00000002','SP00000002',1),
+('PD00000003','SP00000003',3),
+('PD00000004','SP00000004',1),
+('PD00000005','SP00000005',2),
+('PD00000006','SP00000001',1),
+('PD00000007','SP00000002',2),
+('PD00000008','SP00000003',1),
+('PD00000009','SP00000004',2),
+('PD00000010','SP00000005',1);
 
-COMMIT;
 
-PRINT N'Đã tạo dữ liệu mẫu cơ bản: CN, NV, DV, SP, VC, Gói, kho, KH + TK, thú cưng, hóa đơn.';
-PRINT N'Lưu ý: Chưa tạo PHIENDICHVU/TOATHUOC/MUAHANG/TIEMPHONG vì trigger F gọi sp_RecalcHoaDon (cần có stored procedure).';
-GO
+-- Không vi phạm trigger MUAHANG.
+
+-- GOITIEMPHONG (10)
+INSERT INTO GOITIEMPHONG VALUES
+('GO00000001',N'Gói cơ bản chó',6,10),
+('GO00000002',N'Gói cơ bản mèo',6,10),
+('GO00000003',N'Gói nâng cao chó',12,15),
+('GO00000004',N'Gói nâng cao mèo',12,15),
+('GO00000005',N'Gói VIP chó',24,20),
+('GO00000006',N'Gói VIP mèo',24,20),
+('GO00000007',N'Gói tiêm nhanh',3,5),
+('GO00000008',N'Gói phòng bệnh',6,8),
+('GO00000009',N'Gói phòng dịch',12,12),
+('GO00000010',N'Gói tổng hợp',18,18);
+
+-- GOITIEMPHONG_VACCINE (≥10)
+INSERT INTO GOITIEMPHONG_VACCINE VALUES
+('GO00000001','VC00000001',1),
+('GO00000001','VC00000002',1),
+('GO00000002','VC00000003',1),
+('GO00000003','VC00000004',1),
+('GO00000003','VC00000005',1),
+('GO00000004','VC00000006',1),
+('GO00000005','VC00000007',1),
+('GO00000006','VC00000008',1),
+('GO00000007','VC00000009',1),
+('GO00000008','VC00000010',1);
+
+-- TIEMPHONG (10 – gắn PHIENDICHVU + bác sĩ thú y)
+INSERT INTO TIEMPHONG VALUES
+('PD00000001','VC00000001','GO00000001','NV00000005','2025-01-01',1),
+('PD00000002','VC00000002','GO00000001','NV00000007','2025-01-02',1),
+('PD00000003','VC00000003','GO00000002','NV00000005','2025-01-03',1),
+('PD00000004','VC00000004','GO00000003','NV00000007','2025-01-04',1),
+('PD00000005','VC00000005','GO00000003','NV00000005','2025-01-05',1),
+('PD00000006','VC00000006','GO00000004','NV00000007','2025-01-06',1),
+('PD00000007','VC00000007','GO00000005','NV00000005','2025-01-07',1),
+('PD00000008','VC00000008','GO00000006','NV00000007','2025-01-08',1),
+('PD00000009','VC00000009','GO00000007','NV00000005','2025-01-09',1),
+('PD00000010','VC00000010','GO00000008','NV00000007','2025-01-10',1);
+
+-- MUA_GOI (10)
+INSERT INTO MUA_GOI VALUES
+('KH00000001','GO00000001','HD00000001'),
+('KH00000002','GO00000002','HD00000002'),
+('KH00000003','GO00000003','HD00000003'),
+('KH00000004','GO00000004','HD00000004'),
+('KH00000005','GO00000005','HD00000005'),
+('KH00000006','GO00000006','HD00000006'),
+('KH00000007','GO00000007','HD00000007'),
+('KH00000008','GO00000008','HD00000008'),
+('KH00000009','GO00000009','HD00000009'),
+('KH00000010','GO00000010','HD00000010');
+
+-- GOI_KHACHHANG_VACCINE (10)
+INSERT INTO GOI_KHACHHANG_VACCINE VALUES
+('KH00000001','GO00000001','VC00000001',0),
+('KH00000002','GO00000002','VC00000003',0),
+('KH00000003','GO00000003','VC00000004',0),
+('KH00000004','GO00000004','VC00000006',0),
+('KH00000005','GO00000005','VC00000007',0),
+('KH00000006','GO00000006','VC00000008',0),
+('KH00000007','GO00000007','VC00000009',0),
+('KH00000008','GO00000008','VC00000010',0),
+('KH00000009','GO00000009','VC00000001',0),
+('KH00000010','GO00000010','VC00000002',0);
+
+
+-- LICHSUDIEUDONG (10)
+INSERT INTO LICHSUDIEUDONG VALUES
+('NV00000001','CN00000001','2022-01-01','2023-01-01',N'Nhân viên bán hàng'),
+('NV00000002','CN00000002','2022-01-01','2023-01-01',N'Nhân viên bán hàng'),
+('NV00000003','CN00000003','2022-01-01','2023-01-01',N'Tiếp tân'),
+('NV00000004','CN00000004','2022-01-01','2023-01-01',N'Quản lí'),
+('NV00000005','CN00000005','2022-01-01','2023-01-01',N'Bác sĩ thú y'),
+('NV00000006','CN00000006','2022-01-01','2023-01-01',N'Nhân viên bán hàng'),
+('NV00000007','CN00000007','2022-01-01','2023-01-01',N'Bác sĩ thú y'),
+('NV00000008','CN00000008','2022-01-01','2023-01-01',N'Tiếp tân'),
+('NV00000009','CN00000009','2022-01-01','2023-01-01',N'Quản lí'),
+('NV00000010','CN00000010','2022-01-01','2023-01-01',N'Nhân viên bán hàng');
