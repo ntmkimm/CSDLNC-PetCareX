@@ -2,14 +2,14 @@ conda create -n csdlnc python=3.10 -y
 conda activate csdlnc
 pip install -r requirements.txt
 
-petcarex-backend/
-├─ app/
+PetCareX/
+├─ app/                    # BACKEND
 │  ├─ main.py
 │  ├─ core/
 │  │  ├─ config.py          # đọc .env
 │  │  ├─ security.py        # JWT + hash password
 │  ├─ db/
-~│  │  ├─ session.py         # SQLAlchemy engine/session
+|  │  ├─ session.py         # SQLAlchemy engine/session
 │  │  ├─ migrate.py         # tạo DB + chạy *.sql trong migrations/
 │  ├─ api/
 │  │  ├─ router.py
@@ -27,11 +27,22 @@ petcarex-backend/
 │  ├─ 001_logic.sql         # function/procedure/trigger (nếu có)
 │  ├─ 002_seed.sql          # (tuỳ) seed dữ liệu mẫu
 ├─ requirements.txt
-├─ .env.example
+├─ petcarex-admin/           # FRONTEND
 └─ README.md
 
 
 ```
 uvicorn app.main:app --reload
 python -m scripts.drop_db
+```
+
+
+
+## FRONTEND
+```
+npx create-next-app@latest petcarex-admin  --ts --app --eslint --src-dir --import-alias "@/*"
+
+cd petcarex-admin
+npm i antd @ant-design/icons axios recharts dayjs
+npm run dev
 ```

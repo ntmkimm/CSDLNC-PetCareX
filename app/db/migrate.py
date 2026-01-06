@@ -1,3 +1,4 @@
+# app/api/db/migrate.py
 from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
