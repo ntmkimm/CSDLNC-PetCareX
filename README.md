@@ -1,8 +1,5 @@
-```
-conda create -n csdlnc python=3.10 -y
-conda activate csdlnc
-pip install -r requirements.txt
-```
+
+## PROJECT FOLDERS
 
 ```text
 PetCareX/
@@ -35,17 +32,29 @@ PetCareX/
 
 ```
 
+# HOW TO RUN
+
+## BACKEND
+
 ```
+cd PetCareX/
+docker compose up -d
+conda create -n csdlnc python=3.10 -y
+conda activate csdlnc
+pip install -r requirements.txt
 uvicorn app.main:app --reload
+```
+
+
+If you want to clear database
+```
 python -m scripts.drop_db
 ```
 
-
+Note (please ignore): npx create-next-app@latest petcarex-admin  --ts --app --eslint --src-dir --import-alias "@/*"
 
 ## FRONTEND
 ```
-npx create-next-app@latest petcarex-admin  --ts --app --eslint --src-dir --import-alias "@/*"
-
 cd petcarex-admin
 npm i antd @ant-design/icons axios recharts dayjs
 npm run dev
