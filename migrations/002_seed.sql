@@ -15,17 +15,17 @@ INSERT INTO CHINHANH (MaCN, TenCN, Diachi, SDT, Giomocua, Giodongcua) VALUES
 ('CN010', N'PetCare Phú Nhuận', N'707 Phan Xích Long, PN, HCM', '0901111010', '08:00', '21:00');
 
 -- 2. DICHVU (10 dòng)
-INSERT INTO DICHVU (MaDV, TenDV) VALUES
-('DV001', N'Khám bệnh đa khoa'),
-('DV002', N'Tiêm phòng Vaccine'),
-('DV003', N'Tắm rửa & Vệ sinh'),
-('DV004', N'Cắt tỉa lông nghệ thuật'),
-('DV005', N'Lưu trú nội trú'),
-('DV006', N'Xét nghiệm máu'),
-('DV007', N'Siêu âm/X-Quang'),
-('DV008', N'Phẫu thuật triệt sản'),
-('DV009', N'Lấy cao răng'),
-('DV010', N'Điều trị nội ký sinh');
+INSERT INTO DICHVU (MaDV, TenDV, DonGia) VALUES
+('DV001', N'Khám bệnh đa khoa',        150000),
+('DV002', N'Tiêm phòng Vaccine',       200000),
+('DV003', N'Tắm rửa & Vệ sinh',        120000),
+('DV004', N'Cắt tỉa lông nghệ thuật',  180000),
+('DV005', N'Lưu trú nội trú',          250000),
+('DV006', N'Xét nghiệm máu',           300000),
+('DV007', N'Siêu âm / X-Quang',        400000),
+('DV008', N'Phẫu thuật triệt sản',    1500000),
+('DV009', N'Lấy cao răng',             220000),
+('DV010', N'Điều trị nội ký sinh',     180000);
 
 -- 3. SANPHAM (10 dòng: 5 Thuốc, 5 Phụ kiện để test Trigger)
 INSERT INTO SANPHAM (MaSP, TenSP, LoaiSP, DonGia) VALUES

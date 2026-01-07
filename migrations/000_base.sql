@@ -113,12 +113,32 @@ CREATE TABLE HOADON (
 );
 
 CREATE TABLE PHIENDICHVU (
-    MaPhien VARCHAR(10) PRIMARY KEY DEFAULT ('PD' + RIGHT('000000' + CAST(NEXT VALUE FOR dbo.SEQ_PHIENDICHVU AS VARCHAR(6)), 6)),
-    MaHoaDon VARCHAR(10) REFERENCES HOADON(MaHoaDon),
-    MaThuCung VARCHAR(10) REFERENCES THUCUNG(MaThuCung),
-    MaDV VARCHAR(10) REFERENCES DICHVU(MaDV),
-    GiaTien DECIMAL(18, 2) DEFAULT 0 CHECK (GiaTien >= 0)
+    MaPhien VARCHAR(10) PRIMARY KEY 
+        DEFAULT ('PD' + RIGHT('000000' + CAST(NEXT VALUE FOR dbo.SEQ_PHIENDICHVU AS VARCHAR(6)), 6)),
+
+    MaHoaDon VARCHAR(10) NULL 
+        REFERENCES HOADON(MaHoaDon),
+
+    MaThuCung VARCHAR(10) NULL 
+        REFERENCES THUCUNG(MaThuCung),
+
+    MaDV VARCHAR(10) NOT NULL 
+        REFERENCES DICHVU(MaDV),
+
+    GiaTien DECIMAL(18, 2) DEFAULT 0 CHECK (GiaTien >= 0),
+
+    TrangThai NVARCHAR(20) NOT NULL DEFAULT N'BOOKING'
+        CHECK (TrangThai IN (
+            N'BOOKING',      -- đặt lịch / giỏ hàng
+            N'IN_SERVICE',   -- đang khám / đang làm
+            N'CONFIRMED',    -- đã thanh toán
+            N'CANCELLED'
+        )),
+
+    ThoiDiemBatDau DATETIME NULL,
+    ThoiDiemKetThuc DATETIME NULL
 );
+
 
 CREATE TABLE KHAMBENH (
     MaPhien VARCHAR(10) PRIMARY KEY REFERENCES PHIENDICHVU(MaPhien),
@@ -170,3 +190,10 @@ CREATE TABLE NHANXET (
     PRIMARY KEY (MaKH, MaHoaDon)
 );
 GO
+
+ALTER TABLE DICHVU
+ADD DonGia DECIMAL(18,2) NOT NULL
+    CONSTRAINT CHK_DICHVU_DonGia CHECK (DonGia >= 0);
+
+INSERT INTO NHANVIEN (MaNV, HoTen, ChucVu)
+VALUES ('NV_SYSTEM', N'Hệ thống thanh toán online', N'Nhân viên bán hàng');

@@ -32,24 +32,19 @@ def kh2_list_pets(db: Session, ma_kh: str):
     return rows
 
 
-def kh2_create_pet(
-    db: Session,
-    ma_kh: str,
-    ma_thu_cung: str,
-    ten: str,
-    loai: Optional[str] = None,
-    giong: Optional[str] = None,
-):
+def kh2_create_pet(db: Session, ma_kh: str, ten: str, loai=None, giong=None):
     try:
-        db.execute(
+        row = db.execute(
             text("""
-                INSERT INTO THUCUNG(MaThuCung, MaKH, Ten, Loai, Giong)
-                VALUES(:id, :makh, :ten, :loai, :giong)
+                INSERT INTO THUCUNG (MaKH, Ten, Loai, Giong)
+                OUTPUT INSERTED.MaThuCung
+                VALUES (:makh, :ten, :loai, :giong)
             """),
-            {"id": ma_thu_cung, "makh": ma_kh, "ten": ten, "loai": loai, "giong": giong},
-        )
+            {"makh": ma_kh, "ten": ten, "loai": loai, "giong": giong},
+        ).scalar_one()
         db.commit()
-        return {"ok": True, "MaThuCung": ma_thu_cung}
+        return {"ok": True, "MaThuCung": row}
+
     except DBAPIError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"DB error: {str(e.orig) if e.orig else str(e)}")
@@ -217,3 +212,230 @@ def kh7_review_invoice(
     except DBAPIError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"DB error: {str(e.orig) if e.orig else str(e)}")
+
+
+def kh8_search_products(db: Session, keyword: str | None, loai: str | None):
+    rows = db.execute(
+        text("""
+            SELECT MaSP, TenSP, LoaiSP, DonGia
+            FROM SANPHAM
+            WHERE (:kw IS NULL OR TenSP LIKE N'%' + :kw + N'%')
+              AND (:loai IS NULL OR LoaiSP = :loai)
+        """),
+        {"kw": keyword, "loai": loai},
+    ).mappings().all()
+    return rows
+
+
+def kh10_pet_medical_history(db: Session, ma_thu_cung: str, ma_kh: str):
+    ok = db.execute(
+        text("SELECT 1 FROM THUCUNG WHERE MaThuCung=:tc AND MaKH=:kh"),
+        {"tc": ma_thu_cung, "kh": ma_kh},
+    ).first()
+    if not ok:
+        raise HTTPException(status_code=404, detail="Pet not found")
+
+    rows = db.execute(
+        text("""
+            SELECT hd.NgayLap, dv.TenDV,
+                   kb.ChanDoan, kb.CacTrieuChung, kb.NgayTaiKham
+            FROM PHIENDICHVU pd
+            JOIN HOADON hd ON hd.MaHoaDon = pd.MaHoaDon
+            JOIN DICHVU dv ON dv.MaDV = pd.MaDV
+            JOIN KHAMBENH kb ON kb.MaPhien = pd.MaPhien
+            WHERE pd.MaThuCung = :pet
+            ORDER BY hd.NgayLap DESC
+        """),
+        {"pet": ma_thu_cung},
+    ).mappings().all()
+    return rows
+
+
+def kh11_purchase_history(db: Session, ma_kh: str):
+    rows = db.execute(
+        text("""
+            SELECT h.MaHoaDon, h.NgayLap,
+                   sp.MaSP, sp.TenSP,
+                   mh.SoLuong, sp.DonGia,
+                   (mh.SoLuong * sp.DonGia) AS ThanhTien
+            FROM HOADON h
+            JOIN PHIENDICHVU pd ON h.MaHoaDon = pd.MaHoaDon
+            JOIN MUAHANG mh ON pd.MaPhien = mh.MaPhien
+            JOIN SANPHAM sp ON mh.MaSP = sp.MaSP
+            WHERE h.MaKH = :kh
+            ORDER BY h.NgayLap DESC
+        """),
+        {"kh": ma_kh},
+    ).mappings().all()
+    return rows
+
+
+def kh12_invoice_detail(db: Session, ma_hoa_don: str, ma_kh: str):
+    header = db.execute(
+        text("""
+            SELECT MaHoaDon, NgayLap, TongTien, KhuyenMai, HinhThucThanhToan
+            FROM HOADON
+            WHERE MaHoaDon = :hd AND MaKH = :kh
+        """),
+        {"hd": ma_hoa_don, "kh": ma_kh},
+    ).mappings().first()
+
+    if not header:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    items = db.execute(
+        text("""
+            SELECT dv.TenDV, pd.GiaTien
+            FROM PHIENDICHVU pd
+            JOIN DICHVU dv ON pd.MaDV = dv.MaDV
+            WHERE pd.MaHoaDon = :hd
+        """),
+        {"hd": ma_hoa_don},
+    ).mappings().all()
+
+    return {"header": header, "items": items}
+
+
+def kh13_list_services(db: Session):
+    return db.execute(
+        text("SELECT MaDV, TenDV FROM DICHVU")
+    ).mappings().all()
+
+
+def kh14_my_appointments(db: Session, ma_kh: str):
+    rows = db.execute(
+        text("""
+            SELECT h.MaHoaDon, h.NgayLap,
+                   tc.MaThuCung, tc.Ten AS TenThuCung,
+                   dv.TenDV, pd.GiaTien
+            FROM HOADON h
+            JOIN PHIENDICHVU pd ON h.MaHoaDon = pd.MaHoaDon
+            JOIN THUCUNG tc ON pd.MaThuCung = tc.MaThuCung
+            JOIN DICHVU dv ON pd.MaDV = dv.MaDV
+            WHERE h.MaKH = :kh
+            ORDER BY h.NgayLap DESC
+        """),
+        {"kh": ma_kh},
+    ).mappings().all()
+    return rows
+
+
+def kh15_cancel_appointment(db: Session, ma_phien: str, ma_kh: str):
+    res = db.execute(
+        text("""
+            UPDATE pd
+            SET TrangThai = N'CANCELLED'
+            FROM PHIENDICHVU pd
+            JOIN THUCUNG tc ON pd.MaThuCung = tc.MaThuCung
+            WHERE pd.MaPhien = :ph
+              AND tc.MaKH = :kh
+              AND pd.TrangThai = N'BOOKING'
+        """),
+        {"ph": ma_phien, "kh": ma_kh},
+    )
+    db.commit()
+
+    if res.rowcount == 0:
+        raise HTTPException(status_code=400, detail="Cannot cancel this appointment")
+
+    return {"ok": True}
+
+
+def kh16_create_booking(
+    db: Session,
+    ma_kh: str,
+    ma_thu_cung: str,
+    ma_dv: str,
+):
+    # check pet ownership
+    ok = db.execute(
+        text("SELECT 1 FROM THUCUNG WHERE MaThuCung=:tc AND MaKH=:kh"),
+        {"tc": ma_thu_cung, "kh": ma_kh},
+    ).first()
+    if not ok:
+        raise HTTPException(status_code=404, detail="Pet not found")
+
+    # 🔥 lấy giá dịch vụ
+    gia = db.execute(
+        text("SELECT DonGia FROM DICHVU WHERE MaDV = :dv"),
+        {"dv": ma_dv},
+    ).scalar()
+
+    if gia is None:
+        raise HTTPException(status_code=400, detail="Service price not found")
+
+    # SQL sửa lại để tương thích với Trigger và tránh đóng Result Set sớm
+    query = text("""
+        SET NOCOUNT ON; -- Quan trọng 1: Chặn tin nhắn phụ từ Trigger
+        
+        -- Khai báo biến bảng để hứng kết quả
+        DECLARE @TempOutput TABLE (NewMaPhien VARCHAR(10));
+
+        INSERT INTO PHIENDICHVU (MaThuCung, MaDV, GiaTien, TrangThai)
+        OUTPUT INSERTED.MaPhien INTO @TempOutput -- Quan trọng 2: OUTPUT vào biến (bắt buộc khi có Trigger)
+        VALUES (:tc, :dv, :gia, N'BOOKING');
+
+        -- Trả về giá trị từ biến bảng
+        SELECT NewMaPhien FROM @TempOutput;
+    """)
+
+    try:
+        # Thực thi và lấy kết quả duy nhất
+        result = db.execute(
+            query,
+            {"tc": ma_thu_cung, "dv": ma_dv, "gia": gia},
+        )
+        
+        # Lấy giá trị MaPhien
+        ma_phien = result.scalar()
+
+        db.commit()
+        return {"ok": True, "MaPhien": ma_phien}
+    except Exception as e:
+        db.rollback()
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+def kh17_my_bookings(db: Session, ma_kh: str):
+    return db.execute(
+        text("""
+            SELECT 
+                pd.MaPhien,
+                pd.TrangThai,
+                pd.GiaTien,
+                tc.Ten AS TenThuCung,
+                dv.TenDV
+            FROM PHIENDICHVU pd
+            JOIN THUCUNG tc ON pd.MaThuCung = tc.MaThuCung
+            JOIN DICHVU dv ON pd.MaDV = dv.MaDV
+            WHERE tc.MaKH = :kh
+              AND pd.TrangThai = N'BOOKING'
+            ORDER BY pd.MaPhien DESC
+        """),
+        {"kh": ma_kh},
+    ).mappings().all()
+    
+def kh18_confirm_booking(
+    db: Session,
+    ma_phien: str,
+    hinh_thuc_thanh_toan: str,
+):
+    try:
+        exec_sp(
+            db,
+            "EXEC dbo.sp_ConfirmPhienDichVu "
+            "@MaPhien=:ph, @NhanVienLap=:nv, @HinhThucTT=:httt, @KhuyenMai=:km",
+            {
+                "ph": ma_phien,
+                "nv": None,  # 👈 web payment
+                "httt": hinh_thuc_thanh_toan,
+                "km": 0,
+            },
+        )
+        return {"ok": True}
+    except DBAPIError as e:
+        raise HTTPException(status_code=400, detail=str(e.orig))
+
+
