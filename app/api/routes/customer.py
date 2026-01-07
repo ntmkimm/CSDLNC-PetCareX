@@ -55,6 +55,26 @@ def confirm_appointment(
         db, ma_phien, hinh_thuc_thanh_toan
     )
 
+@router.get("/products/search")
+def search_products(
+    keyword: str | None = None,
+    loai: str | None = None,
+    db: Session = Depends(get_db),
+):
+    return {
+        "items": customer_service.kh8_search_products(db, keyword, loai)
+    }
+    
+@router.post("/orders/products")
+def booking_product(
+    ma_kh: str,      # Cần mã khách hàng để biết giỏ hàng của ai
+    ma_sp: str,
+    so_luong: int,
+    db: Session = Depends(get_db),
+):
+    return customer_service.kh4_booking_product(db, ma_kh, ma_sp, so_luong)
+
+
 @router.delete("/appointments/{ma_phien}")
 def cancel_booking(ma_phien: str, ma_kh: str, db: Session = Depends(get_db)):
     return customer_service.kh15_cancel_appointment(db, ma_phien, ma_kh)
@@ -72,3 +92,22 @@ def my_appointments(ma_kh: str, db: Session = Depends(get_db)):
 @router.get("/me/purchases")
 def my_purchases(ma_kh: str, db: Session = Depends(get_db)):
     return {"items": customer_service.kh11_purchase_history(db, ma_kh)}
+
+@router.post("/orders/confirm")
+def confirm_invoice(
+    ma_hoa_don: str,
+    hinh_thuc_thanh_toan: str,
+    db: Session = Depends(get_db),
+):
+    return customer_service.kh_confirm_invoice(
+        db, ma_hoa_don, hinh_thuc_thanh_toan
+    )
+    
+@router.post("/packages/buy")
+def buy_package(
+    ma_kh: str,
+    ma_goi: str,
+    db: Session = Depends(get_db),
+):
+    return customer_service.kh_buy_package(db, ma_kh, ma_goi)
+

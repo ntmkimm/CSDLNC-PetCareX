@@ -193,11 +193,11 @@ GO
 /* =========================================================
    7. PROCEDURE: CONFIRM PHIÊN DỊCH VỤ (CHỐT NGHIỆP VỤ)
    ========================================================= */
-CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPhienDichVu
-    @MaPhien        VARCHAR(10),
-    @NhanVienLap    VARCHAR(10) = NULL,
-    @HinhThucTT     NVARCHAR(50),
-    @KhuyenMai      FLOAT = 0
+-- 2. Cập nhật lại Procedure xác nhận hóa đơn (Đa chi nhánh)
+CREATE OR ALTER PROCEDURE dbo.sp_ConfirmHoaDon
+    @MaHoaDon        VARCHAR(10),
+    @HinhThucTT      NVARCHAR(50),
+    @NhanVienLap     VARCHAR(10) = 'NV_SYSTEM'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -206,88 +206,128 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
-        IF @NhanVienLap IS NULL
-            SET @NhanVienLap = 'NV_SYSTEM';
+        -- 0. Check còn phiên cần thanh toán không
+        IF NOT EXISTS (
+            SELECT 1 FROM PHIENDICHVU
+            WHERE MaHoaDon = @MaHoaDon
+              AND TrangThai = N'BOOKING'
+        )
+            THROW 50020, N'Hóa đơn không còn phiên nào cần thanh toán', 1;
 
-        DECLARE 
-            @MaHoaDon VARCHAR(10),
-            @MaKH VARCHAR(10),
-            @TrangThai NVARCHAR(20),
-            @GiaDichVu DECIMAL(18,2);
-
-        /* 1. Kiểm tra phiên dịch vụ */
-        SELECT 
-            @TrangThai = pd.TrangThai,
-            @MaKH = tc.MaKH
-        FROM PHIENDICHVU pd
-        JOIN THUCUNG tc ON pd.MaThuCung = tc.MaThuCung
-        WHERE pd.MaPhien = @MaPhien;
-
-        IF @TrangThai IS NULL
-            THROW 50001, N'Phiên dịch vụ không tồn tại', 1;
-
-        IF @TrangThai <> N'BOOKING'
-            THROW 50002, N'Chỉ được xác nhận phiên ở trạng thái BOOKING', 1;
-
-        /* 2. LẤY GIÁ DỊCH VỤ (CHỐT GIÁ) */
-        SELECT @GiaDichVu = dv.DonGia
-        FROM PHIENDICHVU pd
-        JOIN DICHVU dv ON pd.MaDV = dv.MaDV
-        WHERE pd.MaPhien = @MaPhien;
-
-        IF @GiaDichVu IS NULL
-            THROW 50005, N'Không xác định được giá dịch vụ', 1;
-
-        /* 3. Tạo hóa đơn */
-        EXEC dbo.sp_TaoHoaDon
-            @MaHoaDon OUTPUT,
-            @NhanVienLap,
-            @MaKH,
-            @HinhThucTT,
-            @KhuyenMai;
-
-        /* 4. CHECK THUỐC TRƯỚC KHI TRỪ */
+        -- 1. Check tồn kho
         IF EXISTS (
             SELECT 1
-            FROM TOATHUOC tt
-            JOIN PHIENDICHVU pd ON tt.MaPhien = pd.MaPhien
-            JOIN HOADON h ON pd.MaHoaDon = h.MaHoaDon
-            JOIN NHANVIEN nv ON h.NhanVienLap = nv.MaNV
-            JOIN CHINHANH_SANPHAM csp
-                ON csp.MaSP = tt.MaThuoc AND csp.MaCN = nv.MaCN
-            WHERE pd.MaPhien = @MaPhien
-              AND csp.SoLuongTonKho < tt.Soluong
+            FROM MUAHANG mh
+            JOIN PHIENDICHVU pd ON mh.MaPhien = pd.MaPhien
+            JOIN CHINHANH_SANPHAM csp 
+                 ON csp.MaSP = mh.MaSP AND csp.MaCN = pd.MaCN
+            WHERE pd.MaHoaDon = @MaHoaDon 
+              AND pd.TrangThai = N'BOOKING'
+              AND csp.SoLuongTonKho < mh.SoLuong
         )
-            THROW 50003, N'Không đủ thuốc trong kho', 1;
+            THROW 50021, N'Một số sản phẩm không đủ hàng tại chi nhánh đã chọn', 1;
 
-        /* 5. TRỪ KHO THUỐC */
+        -- 2. Trừ kho
         UPDATE csp
-        SET csp.SoLuongTonKho -= tt.Soluong
-        FROM TOATHUOC tt
-        JOIN PHIENDICHVU pd ON tt.MaPhien = pd.MaPhien
-        JOIN HOADON h ON pd.MaHoaDon = h.MaHoaDon
-        JOIN NHANVIEN nv ON h.NhanVienLap = nv.MaNV
-        JOIN CHINHANH_SANPHAM csp
-            ON csp.MaSP = tt.MaThuoc AND csp.MaCN = nv.MaCN
-        WHERE pd.MaPhien = @MaPhien;
+        SET csp.SoLuongTonKho -= mh.SoLuong
+        FROM MUAHANG mh
+        JOIN PHIENDICHVU pd ON mh.MaPhien = pd.MaPhien
+        JOIN CHINHANH_SANPHAM csp 
+             ON csp.MaSP = mh.MaSP AND csp.MaCN = pd.MaCN
+        WHERE pd.MaHoaDon = @MaHoaDon 
+          AND pd.TrangThai = N'BOOKING';
 
-        /* 6. CHỐT PHIÊN + GHI GIÁ */
-        UPDATE PHIENDICHVU
+        -- 3. Confirm phiên
+        UPDATE pd
         SET 
-            MaHoaDon = @MaHoaDon,
-            GiaTien = @GiaDichVu,
-            TrangThai = N'CONFIRMED',
-            ThoiDiemKetThuc = GETDATE()
-        WHERE MaPhien = @MaPhien;
+            pd.GiaTien = CASE 
+                WHEN pd.MaDV = 'DV_RETAIL' THEN 0
+                WHEN pd.GiaTien IS NULL OR pd.GiaTien = 0 THEN dv.DonGia
+                ELSE pd.GiaTien
+            END,
+            pd.TrangThai = N'CONFIRMED',
+            pd.ThoiDiemKetThuc = GETDATE()
+        FROM PHIENDICHVU pd
+        LEFT JOIN DICHVU dv ON pd.MaDV = dv.MaDV
+        WHERE pd.MaHoaDon = @MaHoaDon 
+          AND pd.TrangThai = N'BOOKING';
+
+        -- 4. Update hóa đơn
+        UPDATE HOADON
+        SET 
+            HinhThucThanhToan = @HinhThucTT,
+            NhanVienLap = @NhanVienLap,
+            NgayLap = GETDATE(),
+            TongTien = dbo.fn_CalculateHoaDonTotal(@MaHoaDon)
+        WHERE MaHoaDon = @MaHoaDon;
 
         COMMIT;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK;
+        THROW;
+    END CATCH
+END;
 
-        SELECT 
-            N'OK' AS Status,
-            @MaHoaDon AS MaHoaDon,
-            @MaPhien AS MaPhien,
-            @GiaDichVu AS GiaDichVu;
 
+CREATE OR ALTER PROCEDURE dbo.sp_MuaGoiTiemPhong
+    @MaKH VARCHAR(10),
+    @MaGoi VARCHAR(10),
+    @MaHoaDon VARCHAR(10)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    BEGIN TRY
+        BEGIN TRAN;
+
+        -- 1. Kiểm tra hóa đơn thuộc khách
+        IF NOT EXISTS (
+            SELECT 1 FROM HOADON
+            WHERE MaHoaDon = @MaHoaDon
+              AND MaKH = @MaKH
+        )
+            THROW 50030, N'Hóa đơn không thuộc khách hàng', 1;
+
+        -- 2. Ghi nhận mua gói
+        IF NOT EXISTS (
+            SELECT 1 FROM MUA_GOI
+            WHERE MaKH = @MaKH AND MaGoi = @MaGoi AND MaHoaDon = @MaHoaDon
+        )
+        INSERT INTO MUA_GOI (MaKH, MaGoi, MaHoaDon)
+        VALUES (@MaKH, @MaGoi, @MaHoaDon);
+
+        -- 3. Cấp quyền vaccine
+        INSERT INTO GOI_KHACHHANG_VACCINE (MaKH, MaGoi, MaVC, Solieuconlai)
+        SELECT
+            @MaKH,
+            g.MaGoi,
+            g.MaVC,
+            g.SoLieu
+        FROM GOITIEMPHONG_VACCINE g
+        WHERE g.MaGoi = @MaGoi
+          AND NOT EXISTS (
+              SELECT 1
+              FROM GOI_KHACHHANG_VACCINE x
+              WHERE x.MaKH = @MaKH
+                AND x.MaGoi = g.MaGoi
+                AND x.MaVC = g.MaVC
+          );
+
+        -- 4. Áp khuyến mãi vào hóa đơn
+        UPDATE HOADON
+        SET KhuyenMai = (
+            SELECT KhuyenMai FROM GOITIEMPHONG WHERE MaGoi = @MaGoi
+        )
+        WHERE MaHoaDon = @MaHoaDon;
+
+        -- 5. Recalculate
+        UPDATE HOADON
+        SET TongTien = dbo.fn_CalculateHoaDonTotal(@MaHoaDon)
+        WHERE MaHoaDon = @MaHoaDon;
+
+        COMMIT;
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK;
