@@ -40,8 +40,8 @@ export default function StaffPage() {
   const [importForm] = Form.useForm()
 
   const [creatingInv, setCreatingInv] = React.useState(false)
+
   const [vaccines, setVaccines] = React.useState<AnyRow[]>([])
-  const [vaccModalOpen, setVaccModalOpen] = React.useState(false)
   const [loadingVaccines, setLoadingVaccines] = React.useState(false)
 
   const [revenueRows, setRevenueRows] = React.useState<AnyRow[]>([])
@@ -56,6 +56,10 @@ export default function StaffPage() {
   const [loadingInvoices, setLoadingInvoices] = React.useState(false)
   const [loadingInv, setLoadingInv] = React.useState(false)
   const [importing, setImporting] = React.useState(false)
+
+  /** ===== Invoice detail ===== */
+  const [invDetail, setInvDetail] = React.useState<any>(null)
+  const [invDetailOpen, setInvDetailOpen] = React.useState(false)
 
   React.useEffect(() => {
     if (!auth) return
@@ -74,7 +78,7 @@ export default function StaffPage() {
   const role = auth.payload?.role
   const allowedNV = ROLE_NV[role] ?? []
 
-  /* ================= HANDLERS ================= */
+  /* ================= API ================= */
 
   const createInvoice = async (v:any) => {
     setCreatingInv(true)
@@ -93,7 +97,6 @@ export default function StaffPage() {
     try {
       const r = await api.get('/staff/vaccines')
       setVaccines(r.data?.items ?? [])
-      setVaccModalOpen(true)
     } catch (e) { message.error(getErrMsg(e)) }
     finally { setLoadingVaccines(false) }
   }
@@ -147,6 +150,12 @@ export default function StaffPage() {
     finally { setLoadingInvoices(false) }
   }
 
+  const loadInvoiceDetail = async (maHD:string) => {
+    const r = await api.get(`/staff/invoices/${maHD}`)
+    setInvDetail(r.data)
+    setInvDetailOpen(true)
+  }
+
   const loadInventory = async () => {
     setLoadingInv(true)
     try {
@@ -169,14 +178,15 @@ export default function StaffPage() {
     finally { setImporting(false) }
   }
 
-  /* ================= COLUMNS ================= */
+  /* ================= UTILS ================= */
 
   const simpleCols = (keys:string[]):ColumnsType<any> =>
     keys.map(k => ({ title:k, dataIndex:k }))
 
-  /* ================= NV BLOCKS ================= */
+  /* ================= NV MAP ================= */
 
   const NV_MAP: Record<string, any> = {
+
     nv1: {
       key:'nv1', label:'NV1 - Tạo hoá đơn',
       children: (
@@ -194,10 +204,12 @@ export default function StaffPage() {
     nv2: {
       key:'nv2', label:'NV2 - Vaccine',
       children: (
-        <Card extra={<Button onClick={loadVaccines} loading={loadingVaccines}>Tải</Button>}>
-          <Modal open={vaccModalOpen} footer={null} onCancel={()=>setVaccModalOpen(false)}>
-            <Table dataSource={vaccines} columns={simpleCols(['MaVC','TenVC','DonGia'])}/>
-          </Modal>
+        <Card>
+          <Table
+            loading={loadingVaccines}
+            dataSource={vaccines}
+            columns={simpleCols(['MaVC','TenVC','DonGia'])}
+          />
         </Card>
       ),
     },
@@ -239,7 +251,42 @@ export default function StaffPage() {
             <Form.Item name="ma_kh"><Input placeholder="MaKH"/></Form.Item>
             <Button htmlType="submit" loading={loadingInvoices}>Tìm</Button>
           </Form>
-          <Table dataSource={invoiceRows} columns={simpleCols(['MaHoaDon','TongTien'])}/>
+
+          <Table
+            dataSource={invoiceRows}
+            columns={simpleCols(['MaHoaDon','TongTien'])}
+            onRow={(r) => ({
+              onClick: () => loadInvoiceDetail(r.MaHoaDon),
+            })}
+          />
+
+          <Modal
+            open={invDetailOpen}
+            footer={null}
+            width={900}
+            onCancel={() => setInvDetailOpen(false)}
+          >
+            <Typography.Title level={5}>
+              Hoá đơn {invDetail?.hoa_don?.MaHoaDon}
+            </Typography.Title>
+
+            <p>Tổng tiền: {invDetail?.hoa_don?.TongTien}</p>
+            <p>Khuyến mãi: {invDetail?.hoa_don?.KhuyenMai}</p>
+
+            <Typography.Title level={5}>Phiên dịch vụ</Typography.Title>
+            <Table
+              dataSource={invDetail?.phien_dich_vu}
+              columns={simpleCols(['MaPhien','TenDV','GiaTien'])}
+              pagination={false}
+            />
+
+            <Typography.Title level={5}>Tiêm phòng</Typography.Title>
+            <Table
+              dataSource={invDetail?.tiem_phong}
+              columns={simpleCols(['TenVC','SoLieu','NgayTiem'])}
+              pagination={false}
+            />
+          </Modal>
         </Card>
       ),
     },
@@ -283,13 +330,16 @@ export default function StaffPage() {
             <Tag color="geekblue">MaNV:{maNV}</Tag>
             <Tag color="purple">MaCN:{maCN}</Tag>
             <DatePicker value={date} onChange={setDate} />
-            <Button danger onClick={logout}>
-              Logout
-            </Button>
+            <Button danger onClick={logout}>Logout</Button>
           </Space>
         }
       >
-        <Tabs items={allowedNV.map(k => NV_MAP[k])}/>
+        <Tabs
+          items={allowedNV.map(k => NV_MAP[k])}
+          onChange={(key) => {
+            if (key === 'nv2' && vaccines.length === 0) loadVaccines()
+          }}
+        />
       </Card>
     </div>
   )

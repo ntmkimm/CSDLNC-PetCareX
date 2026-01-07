@@ -228,3 +228,68 @@ def nv8_import_product_stock(db: Session, ma_cn: str, ma_sp: str, so_luong: int)
     except DBAPIError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"DB error: {str(e.orig) if e.orig else str(e)}")
+
+
+def nv6_invoice_detail(db: Session, ma_hoa_don: str):
+    hoa_don = db.execute(
+        text("SELECT * FROM HOADON WHERE MaHoaDon = :m"),
+        {"m": ma_hoa_don},
+    ).mappings().first()
+
+    if not hoa_don:
+        raise HTTPException(404, "Không tìm thấy hoá đơn")
+
+    phien = db.execute(
+        text("""
+            SELECT pd.MaPhien, pd.MaThuCung, dv.TenDV, pd.GiaTien
+            FROM PHIENDICHVU pd
+            JOIN DICHVU dv ON dv.MaDV = pd.MaDV
+            WHERE pd.MaHoaDon = :m
+        """),
+        {"m": ma_hoa_don},
+    ).mappings().all()
+
+    kham = db.execute(
+        text("""
+            SELECT kb.*
+            FROM KHAMBENH kb
+            JOIN PHIENDICHVU pd ON pd.MaPhien = kb.MaPhien
+            WHERE pd.MaHoaDon = :m
+        """),
+        {"m": ma_hoa_don},
+    ).mappings().all()
+
+    tiem = db.execute(
+        text("""
+            SELECT tp.*, vc.TenVC
+            FROM TIEMPHONG tp
+            JOIN VACCINE vc ON vc.MaVC = tp.MaVC
+            JOIN PHIENDICHVU pd ON pd.MaPhien = tp.MaPhien
+            WHERE pd.MaHoaDon = :m
+        """),
+        {"m": ma_hoa_don},
+    ).mappings().all()
+
+    thuoc = db.execute(
+        text("""
+            SELECT
+                tt.MaThuoc,
+                sp.TenSP AS TenThuoc,
+                tt.SoLuong,
+                sp.DonGia,
+                tt.SoLuong * sp.DonGia AS ThanhTien
+            FROM TOATHUOC tt
+            JOIN SANPHAM sp ON sp.MaSP = tt.MaThuoc
+            JOIN PHIENDICHVU pd ON pd.MaPhien = tt.MaPhien
+            WHERE pd.MaHoaDon = :m
+        """),
+        {"m": ma_hoa_don},
+    ).mappings().all()
+
+    return {
+        "hoa_don": hoa_don,
+        "phien_dich_vu": phien,
+        "kham_benh": kham,
+        "tiem_phong": tiem,
+        "ke_thuoc": thuoc,
+    }

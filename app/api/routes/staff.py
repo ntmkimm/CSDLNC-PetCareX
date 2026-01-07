@@ -31,6 +31,10 @@ def exams_today(date: str, ma_cn: str, db: Session = Depends(get_db)):
 def search_invoices(from_date: str, to_date: str, ma_cn: str, ma_kh: str = None, db: Session = Depends(get_db)):
     return {"items": staff_service.nv6_search_invoices(db, from_date, to_date, ma_cn, ma_kh)}
 
+@router.get("/invoices/{ma_hoa_don}")  # NV6-DETAIL
+def invoice_detail(ma_hoa_don: str, db: Session = Depends(get_db)):
+    return staff_service.nv6_invoice_detail(db, ma_hoa_don)
+
 @router.get("/inventory")  # NV7
 def inventory(ma_cn: str, db: Session = Depends(get_db)):
     return staff_service.nv7_inventory(db, ma_cn)
