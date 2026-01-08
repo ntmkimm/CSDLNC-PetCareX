@@ -208,45 +208,34 @@ BEGIN
 
         -- 0. Check còn phiên cần thanh toán không
         IF NOT (
-            EXISTS (
-                SELECT 1
-                FROM PHIENDICHVU
-                WHERE MaHoaDon = @MaHoaDon
-                AND TrangThai = N'BOOKING'
-            )
+            EXISTS (SELECT 1 FROM PHIENDICHVU WHERE MaHoaDon = @MaHoaDon AND TrangThai = N'BOOKING')
             OR
-            EXISTS (
-                SELECT 1
-                FROM MUA_GOI
-                WHERE MaHoaDon = @MaHoaDon
-            )
+            EXISTS (SELECT 1 FROM MUA_GOI WHERE MaHoaDon = @MaHoaDon)
         )
             THROW 50020, N'Hóa đơn không còn phiên hoặc gói nào cần thanh toán', 1;
 
-        -- 1. Check tồn kho
+        -- 1. Check tồn kho sản phẩm lẻ
         IF EXISTS (
             SELECT 1
             FROM MUAHANG mh
             JOIN PHIENDICHVU pd ON mh.MaPhien = pd.MaPhien
-            JOIN CHINHANH_SANPHAM csp 
-                 ON csp.MaSP = mh.MaSP AND csp.MaCN = pd.MaCN
+            JOIN CHINHANH_SANPHAM csp ON csp.MaSP = mh.MaSP AND csp.MaCN = pd.MaCN
             WHERE pd.MaHoaDon = @MaHoaDon 
               AND pd.TrangThai = N'BOOKING'
               AND csp.SoLuongTonKho < mh.SoLuong
         )
             THROW 50021, N'Một số sản phẩm không đủ hàng tại chi nhánh đã chọn', 1;
 
-        -- 2. Trừ kho
+        -- 2. Trừ kho sản phẩm lẻ
         UPDATE csp
         SET csp.SoLuongTonKho -= mh.SoLuong
         FROM MUAHANG mh
         JOIN PHIENDICHVU pd ON mh.MaPhien = pd.MaPhien
-        JOIN CHINHANH_SANPHAM csp 
-             ON csp.MaSP = mh.MaSP AND csp.MaCN = pd.MaCN
+        JOIN CHINHANH_SANPHAM csp ON csp.MaSP = mh.MaSP AND csp.MaCN = pd.MaCN
         WHERE pd.MaHoaDon = @MaHoaDon 
           AND pd.TrangThai = N'BOOKING';
 
-        -- 3. Confirm phiên
+        -- 3. Confirm phiên dịch vụ
         UPDATE pd
         SET 
             pd.GiaTien = CASE 
@@ -261,7 +250,7 @@ BEGIN
         WHERE pd.MaHoaDon = @MaHoaDon 
           AND pd.TrangThai = N'BOOKING';
 
-        -- 4. Update hóa đơn
+        -- 4. Update thông tin hóa đơn
         UPDATE HOADON
         SET 
             HinhThucThanhToan = @HinhThucTT,
@@ -270,7 +259,29 @@ BEGIN
             TongTien = dbo.fn_CalculateHoaDonTotal(@MaHoaDon)
         WHERE MaHoaDon = @MaHoaDon;
 
+        -- ========================================================
+        -- BƯỚC 5: KÍCH HOẠT GÓI VACCINE VÀO TÀI KHOẢN KHÁCH HÀNG
+        -- ========================================================
+        -- Logic: Nếu trong hóa đơn có mua gói (MUA_GOI), 
+        -- ta nạp số liều định nghĩa từ GOITIEMPHONG_VACCINE vào GOI_KHACHHANG_VACCINE
+        INSERT INTO GOI_KHACHHANG_VACCINE (MaKH, MaGoi, MaVC, Solieuconlai)
+        SELECT 
+            h.MaKH,
+            mg.MaGoi,
+            gv.MaVC,
+            gv.SoLieu -- Lấy số liều định nghĩa của gói nạp vào ví của khách
+        FROM HOADON h
+        JOIN MUA_GOI mg ON h.MaHoaDon = mg.MaHoaDon
+        JOIN GOITIEMPHONG_VACCINE gv ON mg.MaGoi = gv.MaGoi
+        WHERE h.MaHoaDon = @MaHoaDon
+        AND NOT EXISTS (
+            -- Tránh chèn trùng nếu chạy lại procedure cho cùng 1 hóa đơn
+            SELECT 1 FROM GOI_KHACHHANG_VACCINE gkv
+            WHERE gkv.MaKH = h.MaKH AND gkv.MaGoi = mg.MaGoi AND gkv.MaVC = gv.MaVC
+        );
+
         COMMIT;
+        PRINT 'Thanh toan thanh cong va da kich hoat goi vaccine.';
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK;

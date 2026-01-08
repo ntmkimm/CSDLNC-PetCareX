@@ -120,6 +120,10 @@ def buy_package(
 ):
     return customer_service.kh_buy_package(db, ma_kh, ma_goi)
 
+@router.get("/me/purchased-packages")
+def get_my_purchased_packages(ma_kh: str, db: Session = Depends(get_db)):
+    return {"items": customer_service.kh_get_my_purchased_packages(db, ma_kh)}
+
 @router.get("/branches/by-service")
 def get_branch_by_service(ma_dv: str, db: Session = Depends(get_db)):
     return {

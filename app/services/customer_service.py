@@ -20,6 +20,62 @@ def kh1_list_packages(db: Session):
     ).mappings().all()
     return rows
 
+def kh_get_my_purchased_packages(db: Session, ma_kh: str):
+    # Lấy danh sách gói đã thanh toán (HinhThucThanhToan IS NOT NULL)
+    rows = db.execute(
+        text("""
+            WITH GlobalStock AS (
+                -- Tính tổng tồn kho của từng loại vaccine trên toàn bộ chi nhánh
+                SELECT MaVC, SUM(SoLuongTonKho) as TotalGlobalStock
+                FROM CHINHANH_VACCINE
+                GROUP BY MaVC
+            ),
+            PackageDetails AS (
+                -- Lấy thông tin chi tiết các liều trong gói của khách hàng
+                SELECT 
+                    mg.MaHoaDon,
+                    mg.MaGoi,
+                    gkv.MaVC,
+                    v.TenVC,
+                    gv.SoLieu AS SoMuiGoc,
+                    gkv.Solieuconlai AS SoMuiConLai,
+                    ISNULL(gs.TotalGlobalStock, 0) as TonKhoToanHeThong
+                FROM MUA_GOI mg
+                JOIN GOI_KHACHHANG_VACCINE gkv ON mg.MaKH = gkv.MaKH AND mg.MaGoi = gkv.MaGoi
+                JOIN GOITIEMPHONG_VACCINE gv ON mg.MaGoi = gv.MaGoi AND gkv.MaVC = gv.MaVC
+                JOIN VACCINE v ON gkv.MaVC = v.MaVC
+                LEFT JOIN GlobalStock gs ON gkv.MaVC = gs.MaVC
+                WHERE mg.MaKH = :kh
+            )
+            SELECT 
+                h.MaHoaDon,
+                h.NgayLap AS NgayMua,
+                g.MaGoi,
+                g.TenGoi,
+                DATEADD(MONTH, g.ThoiGian, h.NgayLap) AS NgayHetHan,
+                -- Tổng hợp dữ liệu mũi tiêm
+                SUM(pd.SoMuiGoc) as SoMuiTong,
+                SUM(pd.SoMuiConLai) as SoMuiConLai,
+                SUM(pd.SoMuiGoc - pd.SoMuiConLai) as SoMuiDaDung,
+                -- Cảnh báo: Nếu có bất kỳ vaccine nào trong gói hết hàng ở mọi nơi
+                MAX(CASE WHEN pd.TonKhoToanHeThong = 0 AND pd.SoMuiConLai > 0 THEN 1 ELSE 0 END) as CoCanhBaoHetHang,
+                -- Trạng thái dựa trên thời gian và số mũi
+                CASE 
+                    WHEN GETDATE() > DATEADD(MONTH, g.ThoiGian, h.NgayLap) THEN N'EXPIRED'
+                    WHEN SUM(pd.SoMuiConLai) = 0 THEN N'COMPLETED'
+                    ELSE N'ACTIVE'
+                END AS TrangThai
+            FROM HOADON h
+            JOIN MUA_GOI mg ON h.MaHoaDon = mg.MaHoaDon
+            JOIN GOITIEMPHONG g ON mg.MaGoi = g.MaGoi
+            JOIN PackageDetails pd ON h.MaHoaDon = pd.MaHoaDon AND g.MaGoi = pd.MaGoi
+            WHERE h.MaKH = :kh AND h.HinhThucThanhToan IS NOT NULL
+            GROUP BY h.MaHoaDon, h.NgayLap, g.MaGoi, g.TenGoi, g.ThoiGian
+            ORDER BY h.NgayLap DESC
+        """),
+        {"kh": ma_kh},
+    ).mappings().all()
+    return rows
 
 # ============================================================
 # KH2 - thú cưng
@@ -686,46 +742,34 @@ def kh4_booking_product(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def kh_buy_package(
-    db: Session,
-    ma_kh: str,
-    ma_goi: str,
-):
+def kh_buy_package(db: Session, ma_kh: str, ma_goi: str):
     try:
-        # ============================================
-        # 1. TÌM / TẠO HÓA ĐƠN BOOKING
-        # ============================================
+        # 1. Tìm hóa đơn CHƯA THANH TOÁN của khách hàng này
         ma_hd = db.execute(
             text("""
-                SET NOCOUNT ON;
-                SELECT TOP 1 h.MaHoaDon
-                FROM HOADON h
-                LEFT JOIN PHIENDICHVU pd ON h.MaHoaDon = pd.MaHoaDon
-                WHERE h.MaKH = :kh
-                  AND (pd.TrangThai = N'BOOKING' OR pd.MaPhien IS NULL)
-                ORDER BY h.NgayLap DESC
+                SELECT TOP 1 MaHoaDon
+                FROM HOADON
+                WHERE MaKH = :kh AND HinhThucThanhToan IS NULL
+                ORDER BY NgayLap DESC
             """),
             {"kh": ma_kh},
         ).scalar()
 
+        # 2. Nếu không có hóa đơn chờ, tạo mới và phải có GETDATE()
         if not ma_hd:
             ma_hd = db.execute(
                 text("""
                     SET NOCOUNT ON;
                     DECLARE @out TABLE (ID VARCHAR(10));
-
-                    INSERT INTO HOADON (MaKH, NhanVienLap, HinhThucThanhToan)
+                    INSERT INTO HOADON (MaKH, NgayLap, NhanVienLap, HinhThucThanhToan, TongTien)
                     OUTPUT INSERTED.MaHoaDon INTO @out
-                    VALUES (:kh, 'NV_SYSTEM', NULL);
-
+                    VALUES (:kh, GETDATE(), 'NV_SYSTEM', NULL, 0);
                     SELECT ID FROM @out;
                 """),
                 {"kh": ma_kh},
             ).scalar()
 
-        # ============================================
-        # 2. THÊM GÓI TIÊM
-        # ============================================
+        # 3. Thêm gói vào MUA_GOI
         db.execute(
             text("""
                 INSERT INTO MUA_GOI (MaKH, MaGoi, MaHoaDon)
@@ -734,9 +778,7 @@ def kh_buy_package(
             {"kh": ma_kh, "goi": ma_goi, "hd": ma_hd},
         )
 
-        # ============================================
-        # 3. UPDATE TỔNG TIỀN
-        # ============================================
+        # 4. Cập nhật lại tổng tiền cho hóa đơn
         db.execute(
             text("""
                 UPDATE HOADON
@@ -749,9 +791,9 @@ def kh_buy_package(
         db.commit()
         return {"ok": True, "MaHoaDon": ma_hd}
 
-    except DBAPIError as e:
+    except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e.orig))
+        raise HTTPException(status_code=400, detail=str(e))
 
 def kh_confirm_invoice(
     db: Session,
