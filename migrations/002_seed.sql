@@ -158,72 +158,64 @@ INSERT INTO GOITIEMPHONG_VACCINE (MaGoi, MaVC, SoLieu) VALUES
 ('G006','VC003', 2.0), ('G006','VC005', 2.0),
 ('G009','VC005', 3.0), ('G010','VC004', 2.0);
 
--- 11. TẠO 30 HÓA ĐƠN TRỐNG
+
+
+
+
+
+-- 11. TẠO 30 HÓA ĐƠN VÀ LƯU LẠI DANH SÁCH ID
+DECLARE @NewInvoices TABLE (ID INT IDENTITY(1,1), MaHD VARCHAR(10));
+
 DECLARE @i INT = 1;
 WHILE @i <= 30
 BEGIN
     INSERT INTO HOADON (NhanVienLap, MaKH, HinhThucThanhToan, KhuyenMai)
+    OUTPUT inserted.MaHoaDon INTO @NewInvoices(MaHD) -- Lưu mã vừa tạo
     VALUES (
         'NV000003', 
         'KH' + RIGHT('000000' + CAST(((@i - 1) % 10) + 1 AS VARCHAR), 6), 
-        NULL, 
-        0
+        NULL, 0
     );
     SET @i += 1;
 END
-GO
 
--- 12. PHIÊN DỊCH VỤ KHÁM BỆNH (10 HĐ đầu)
--- SỬA LỖI: Không dùng FORMATMESSAGE, dùng RIGHT + CAST
+-- 12. PHIÊN KHÁM BỆNH (Dùng 10 mã đầu từ bảng tạm)
 INSERT INTO PHIENDICHVU (MaHoaDon, MaThuCung, MaDV, GiaTien, MaCN, TrangThai)
-SELECT TOP 10
-    h.MaHoaDon,
-    'TC' + RIGHT('000000' + CAST(( (ROW_NUMBER() OVER (ORDER BY h.MaHoaDon)-1) % 10) + 1 AS VARCHAR), 6),
-    'DV001', 0,
-    CASE WHEN ROW_NUMBER() OVER (ORDER BY h.MaHoaDon) % 2 = 0 THEN 'CN002' ELSE 'CN001' END,
-    'BOOKING'
-FROM HOADON h ORDER BY h.MaHoaDon;
-GO
+SELECT 
+    t.MaHD,
+    (SELECT TOP 1 MaThuCung FROM THUCUNG WHERE MaKH = h.MaKH), -- Lấy đúng thú cưng của khách đó
+    'DV001', 150000, 'CN001', 'BOOKING'
+FROM @NewInvoices t
+JOIN HOADON h ON t.MaHD = h.MaHoaDon
+WHERE t.ID <= 10;
 
--- 13. KHAMBENH + TOATHUOC
-INSERT INTO KHAMBENH (MaPhien, BacSiPhuTrach, CacTrieuChung, ChanDoan)
-SELECT MaPhien, 'NV000001', N'Mệt mỏi', N'Khám tổng quát' FROM PHIENDICHVU WHERE MaDV = 'DV001';
-
+-- 13. KÊ THUỐC CHO CÁC PHIÊN KHÁM BỆNH VỪA TẠO
 INSERT INTO TOATHUOC (MaPhien, MaThuoc, Soluong)
-SELECT MaPhien, 'SP001', 2 FROM PHIENDICHVU WHERE MaDV = 'DV001';
-GO
+SELECT MaPhien, 'SP001', 2 
+FROM PHIENDICHVU 
+WHERE MaHoaDon IN (SELECT MaHD FROM @NewInvoices WHERE ID <= 10);
 
--- 14. PHIÊN BÁN LẺ (10 HĐ tiếp theo)
+-- 14. PHIÊN BÁN LẺ (10 hóa đơn tiếp theo)
 INSERT INTO PHIENDICHVU (MaHoaDon, MaDV, GiaTien, MaCN, TrangThai)
-SELECT h.MaHoaDon, 'DV_RETAIL', 0, 'CN001', 'BOOKING'
-FROM (SELECT MaHoaDon FROM HOADON ORDER BY MaHoaDon OFFSET 10 ROWS FETCH NEXT 10 ROWS ONLY) h;
-GO
+SELECT MaHD, 'DV_RETAIL', 0, 'CN001', 'BOOKING'
+FROM @NewInvoices WHERE ID BETWEEN 11 AND 20;
 
 INSERT INTO MUAHANG (MaPhien, MaSP, SoLuong)
-SELECT pd.MaPhien, 'SP006', 2 FROM PHIENDICHVU pd WHERE pd.MaDV = 'DV_RETAIL';
-GO
+SELECT MaPhien, 'SP006', 1 
+FROM PHIENDICHVU 
+WHERE MaHoaDon IN (SELECT MaHD FROM @NewInvoices WHERE ID BETWEEN 11 AND 20);
 
--- 15. MUA GÓI TIÊM (10 HĐ cuối)
-INSERT INTO MUA_GOI (MaKH, MaGoi, MaHoaDon)
-SELECT h.MaKH, 'G001', h.MaHoaDon
-FROM (SELECT MaHoaDon, MaKH FROM HOADON ORDER BY MaHoaDon OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY) h;
-GO
-
--- 16. XÁC NHẬN THANH TOÁN
-DECLARE @MaHD VARCHAR(10);
-DECLARE cur CURSOR FOR SELECT MaHoaDon FROM HOADON;
-OPEN cur;
-FETCH NEXT FROM cur INTO @MaHD;
+-- 15. MUA GÓI (Sử dụng Procedure để chuẩn nghiệp vụ)
+DECLARE @hd_temp VARCHAR(10), @kh_temp VARCHAR(10);
+DECLARE cur_goi CURSOR FOR 
+    SELECT MaHoaDon, MaKH FROM HOADON 
+    WHERE MaHoaDon IN (SELECT MaHD FROM @NewInvoices WHERE ID BETWEEN 21 AND 30);
+OPEN cur_goi;
+FETCH NEXT FROM cur_goi INTO @hd_temp, @kh_temp;
 WHILE @@FETCH_STATUS = 0
 BEGIN
-    BEGIN TRY
-        EXEC dbo.sp_ConfirmHoaDon @MaHoaDon = @MaHD, @HinhThucTT = N'Tiền mặt', @NhanVienLap = 'NV_SYSTEM';
-    END TRY
-    BEGIN CATCH
-        PRINT 'Lỗi tại ' + @MaHD + ': ' + ERROR_MESSAGE();
-    END CATCH;
-    FETCH NEXT FROM cur INTO @MaHD;
+    EXEC dbo.sp_MuaGoiTiemPhong @MaKH = @kh_temp, @MaGoi = 'G001', @MaHoaDon = @hd_temp;
+    FETCH NEXT FROM cur_goi INTO @hd_temp, @kh_temp;
 END
-CLOSE cur;
-DEALLOCATE cur;
-GO
+CLOSE cur_goi;
+DEALLOCATE cur_goi;
