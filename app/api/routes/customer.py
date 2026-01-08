@@ -55,6 +55,10 @@ def confirm_appointment(
     return customer_service.kh18_confirm_booking(
         db, ma_phien, hinh_thuc_thanh_toan
     )
+    
+@router.get("/pets/{ma_thu_cung}/medical-history")
+def pet_medical_history(ma_thu_cung: str, ma_kh: str, db: Session = Depends(get_db)):
+    return {"items": customer_service.kh10_pet_medical_history(db, ma_thu_cung, ma_kh)}
 
 @router.get("/products/search")
 def search_products(

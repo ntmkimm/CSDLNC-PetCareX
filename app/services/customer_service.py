@@ -147,6 +147,7 @@ def kh8_search_products(db: Session, keyword: str | None, loai: str | None):
 
 
 def kh10_pet_medical_history(db: Session, ma_thu_cung: str, ma_kh: str):
+    # Kiểm tra quyền sở hữu
     ok = db.execute(
         text("SELECT 1 FROM THUCUNG WHERE MaThuCung=:tc AND MaKH=:kh"),
         {"tc": ma_thu_cung, "kh": ma_kh},
@@ -156,11 +157,22 @@ def kh10_pet_medical_history(db: Session, ma_thu_cung: str, ma_kh: str):
 
     rows = db.execute(
         text("""
-            SELECT hd.NgayLap, dv.TenDV,
-                   kb.ChanDoan, kb.CacTrieuChung, kb.NgayTaiKham
+            SELECT 
+                hd.NgayLap, 
+                dv.TenDV,
+                kb.ChanDoan, 
+                kb.CacTrieuChung, 
+                kb.NgayTaiKham,
+                /* Lấy danh sách thuốc và gộp lại thành chuỗi */
+                (
+                    SELECT STRING_AGG(sp.TenSP + N' (SL: ' + CAST(tt.Soluong AS NVARCHAR) + N')', CHAR(13) + CHAR(10))
+                    FROM TOATHUOC tt
+                    JOIN SANPHAM sp ON tt.MaThuoc = sp.MaSP
+                    WHERE tt.MaPhien = pd.MaPhien
+                ) AS ToaThuoc
             FROM PHIENDICHVU pd
             JOIN HOADON hd ON hd.MaHoaDon = pd.MaHoaDon
-            JOIN DICHVU dv ON dv.MaDV = pd.MaDV
+            JOIN DICHVU dv ON pd.MaDV = dv.MaDV
             JOIN KHAMBENH kb ON kb.MaPhien = pd.MaPhien
             WHERE pd.MaThuCung = :pet
             ORDER BY hd.NgayLap DESC
