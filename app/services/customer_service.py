@@ -89,56 +89,6 @@ def kh3_pet_vaccination_history(db: Session, ma_thu_cung: str, ma_kh: str):
 
 
 # ============================================================
-# KH6 - đặt dịch vụ (tạo HOADON + PHIENDICHVU) -> dùng SP cho đúng nghiệp vụ
-# ============================================================
-def kh6_create_appointment(
-    db: Session,
-    ma_kh: str,
-    ma_hoa_don: str,
-    nhan_vien_lap: str,
-    ma_phien: str,
-    ma_thu_cung: str,
-    ma_dv: str,
-    gia_tien: float,
-    hinh_thuc_thanh_toan: str,
-):
-    # ensure pet belongs to customer
-    pet = db.execute(
-        text("SELECT 1 FROM THUCUNG WHERE MaThuCung = :id AND MaKH = :makh"),
-        {"id": ma_thu_cung, "makh": ma_kh},
-    ).first()
-    if not pet:
-        raise HTTPException(status_code=404, detail="Pet not found")
-
-    # 1) tạo hóa đơn bằng SP
-    exec_sp(
-        db,
-        "EXEC dbo.sp_TaoHoaDon "
-        "@MaHoaDon=:hd, @NhanVienLap=:nv, @MaKH=:kh, @HinhThucThanhToan=:httt, @KhuyenMai=:km",
-        {"hd": ma_hoa_don, "nv": nhan_vien_lap, "kh": ma_kh, "httt": hinh_thuc_thanh_toan, "km": 0},
-        commit=False,  # gom 2 bước vào 1 transaction
-    )
-
-    # 2) tạo phiên dịch vụ bằng SP
-    exec_sp(
-        db,
-        "EXEC dbo.sp_ThemPhienDichVu "
-        "@MaPhien=:ph, @MaHoaDon=:hd, @MaThuCung=:pet, @MaDV=:dv, @GiaTien=:gia",
-        {"ph": ma_phien, "hd": ma_hoa_don, "pet": ma_thu_cung, "dv": ma_dv, "gia": gia_tien},
-        commit=False,
-    )
-
-    # commit chung
-    try:
-        db.commit()
-    except DBAPIError as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"DB error: {str(e.orig) if e.orig else str(e)}")
-
-    return {"ok": True, "MaHoaDon": ma_hoa_don, "MaPhien": ma_phien}
-
-
-# ============================================================
 # KH5 - loyalty
 # ============================================================
 def kh5_my_loyalty(db: Session, ma_kh: str):
@@ -220,67 +170,26 @@ def kh10_pet_medical_history(db: Session, ma_thu_cung: str, ma_kh: str):
     return rows
 
 
+# ============================================================
+# KH11 - Danh sách hóa đơn đã thanh toán
+# ============================================================
 def kh11_purchase_history(db: Session, ma_kh: str):
+    # Trả về danh sách hóa đơn tổng quát
     rows = db.execute(
         text("""
-            SELECT *
-            FROM (
-                /* =======================================================
-                   1. MUA LẺ SẢN PHẨM (DV_RETAIL)
-                   ======================================================= */
-                SELECT
-                    h.MaHoaDon,
-                    h.NgayLap,
-                    N'SAN_PHAM' AS Loai,
-
-                    sp.MaSP AS MaItem,
-                    sp.TenSP AS TenItem,
-
-                    mh.SoLuong,
-                    sp.DonGia,
-                    (mh.SoLuong * sp.DonGia) AS ThanhTien,
-
-                    pd.MaCN
-                FROM HOADON h
-                JOIN PHIENDICHVU pd ON h.MaHoaDon = pd.MaHoaDon
-                JOIN MUAHANG mh ON pd.MaPhien = mh.MaPhien
-                JOIN SANPHAM sp ON mh.MaSP = sp.MaSP
-                WHERE h.MaKH = :kh
-                  AND h.HinhThucThanhToan IS NOT NULL
-                  AND pd.TrangThai = N'CONFIRMED'
-
-                UNION ALL
-
-                /* =======================================================
-                   2. MUA GÓI TIÊM
-                   ======================================================= */
-                SELECT
-                    h.MaHoaDon,
-                    h.NgayLap,
-                    N'GOI_TIEM' AS Loai,
-
-                    g.MaGoi AS MaItem,
-                    g.TenGoi AS TenItem,
-
-                    1 AS SoLuong,
-                    dbo.fn_GiaGoiTiemPhong(g.MaGoi) AS DonGia,
-                    dbo.fn_GiaGoiTiemPhong(g.MaGoi) AS ThanhTien,
-
-                    NULL AS MaCN
-                FROM HOADON h
-                JOIN MUA_GOI mg ON h.MaHoaDon = mg.MaHoaDon
-                JOIN GOITIEMPHONG g ON g.MaGoi = mg.MaGoi
-                WHERE h.MaKH = :kh
-                  AND h.HinhThucThanhToan IS NOT NULL
-            ) x
-            ORDER BY x.NgayLap DESC, x.MaHoaDon DESC
+            SELECT MaHoaDon, NgayLap, TongTien, KhuyenMai, HinhThucThanhToan
+            FROM HOADON
+            WHERE MaKH = :kh AND HinhThucThanhToan IS NOT NULL
+            ORDER BY NgayLap DESC
         """),
         {"kh": ma_kh},
     ).mappings().all()
-
     return rows
 
 
+# ============================================================
+# KH12 - Chi tiết từng hạng mục trong hóa đơn
+# ============================================================
 def kh12_invoice_detail(db: Session, ma_hoa_don: str, ma_kh: str):
     header = db.execute(
         text("""
@@ -296,10 +205,38 @@ def kh12_invoice_detail(db: Session, ma_hoa_don: str, ma_kh: str):
 
     items = db.execute(
         text("""
-            SELECT dv.TenDV, pd.GiaTien
+            /* 1. Hạng mục Dịch vụ (Khám, Tiêm, Spa...) */
+            SELECT dv.TenDV AS TenItem, 1 AS SoLuong, pd.GiaTien AS DonGia, pd.GiaTien AS ThanhTien, 'Service' AS Loai
             FROM PHIENDICHVU pd
             JOIN DICHVU dv ON pd.MaDV = dv.MaDV
+            WHERE pd.MaHoaDon = :hd AND pd.MaDV <> 'DV_RETAIL'
+
+            UNION ALL
+
+            /* 2. Hạng mục Thuốc trong Toa thuốc (Quan trọng: Cái này bị thiếu) */
+            SELECT sp.TenSP AS TenItem, tt.Soluong, sp.DonGia, (tt.Soluong * sp.DonGia) AS ThanhTien, 'Medicine' AS Loai
+            FROM PHIENDICHVU pd
+            JOIN TOATHUOC tt ON pd.MaPhien = tt.MaPhien
+            JOIN SANPHAM sp ON tt.MaThuoc = sp.MaSP
             WHERE pd.MaHoaDon = :hd
+
+            UNION ALL
+
+            /* 3. Hạng mục Sản phẩm bán lẻ (Mua lẻ) */
+            SELECT sp.TenSP AS TenItem, mh.SoLuong, sp.DonGia, (mh.SoLuong * sp.DonGia) AS ThanhTien, 'Product' AS Loai
+            FROM PHIENDICHVU pd
+            JOIN MUAHANG mh ON pd.MaPhien = mh.MaPhien
+            JOIN SANPHAM sp ON mh.MaSP = sp.MaSP
+            WHERE pd.MaHoaDon = :hd
+
+            UNION ALL
+
+            /* 4. Hạng mục Gói tiêm */
+            SELECT g.TenGoi AS TenItem, 1 AS SoLuong, dbo.fn_GiaGoiTiemPhong(g.MaGoi) AS DonGia, 
+                   dbo.fn_GiaGoiTiemPhong(g.MaGoi) AS ThanhTien, 'Package' AS Loai
+            FROM MUA_GOI mg
+            JOIN GOITIEMPHONG g ON g.MaGoi = mg.MaGoi
+            WHERE mg.MaHoaDon = :hd
         """),
         {"hd": ma_hoa_don},
     ).mappings().all()

@@ -94,6 +94,10 @@ def my_appointments(ma_kh: str, db: Session = Depends(get_db)):
 def my_purchases(ma_kh: str, db: Session = Depends(get_db)):
     return {"items": customer_service.kh11_purchase_history(db, ma_kh)}
 
+@router.get("/invoices/{ma_hoa_don}")
+def get_invoice_detail(ma_hoa_don: str, ma_kh: str, db: Session = Depends(get_db)):
+    return customer_service.kh12_invoice_detail(db, ma_hoa_don, ma_kh)
+
 @router.post("/orders/confirm")
 def confirm_invoice(
     ma_hoa_don: str,

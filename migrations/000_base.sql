@@ -193,11 +193,3 @@ CREATE TABLE NHANXET (
     Thaidonhanvien NVARCHAR(MAX), Binhluan NVARCHAR(MAX),
     PRIMARY KEY (MaKH, MaHoaDon)
 );
-
-INSERT INTO NHANVIEN (MaNV, HoTen, ChucVu)
-VALUES ('NV_SYSTEM', N'Hệ thống thanh toán online', N'Nhân viên bán hàng');
-GO
-
-INSERT INTO DICHVU (MaDV, TenDV, DonGia) 
-VALUES ('DV_RETAIL', N'Mua sắm sản phẩm', 0); -- Giá dịch vụ bằng 0 vì chỉ tính tiền sản phẩm
-GO
