@@ -120,6 +120,19 @@ def buy_package(
 ):
     return customer_service.kh_buy_package(db, ma_kh, ma_goi)
 
+@router.get("/me/purchased-packages/{ma_goi}/details")
+def get_purchased_package_details(
+    ma_goi: str, 
+    ma_kh: str, 
+    db: Session = Depends(get_db)
+):
+    """
+    Lấy chi tiết danh sách vaccine và số mũi còn lại trong một gói cụ thể của khách hàng
+    """
+    return {
+        "items": customer_service.kh_get_purchased_package_details(db, ma_kh, ma_goi)
+    }
+
 @router.get("/me/purchased-packages")
 def get_my_purchased_packages(ma_kh: str, db: Session = Depends(get_db)):
     return {"items": customer_service.kh_get_my_purchased_packages(db, ma_kh)}

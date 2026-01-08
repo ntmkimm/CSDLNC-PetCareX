@@ -795,6 +795,44 @@ def kh_buy_package(db: Session, ma_kh: str, ma_goi: str):
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
+def kh_get_purchased_package_details(db: Session, ma_kh: str, ma_goi: str):
+    rows = db.execute(
+        text("""
+            SELECT 
+                -- 1. Lấy tên vaccine, nếu bảng danh mục bị xóa thì hiện mã để debug
+                ISNULL(v.TenVC, N'Vaccine lỗi/đã xóa (' + gkv.MaVC + ')') AS TenVC,
+                
+                -- 2. Liều lượng (thay cho LoaiVC bị lỗi lúc nãy)
+                v.LieuLuong,
+
+                -- 3. Lấy số liều gốc từ định nghĩa gói (GOITIEMPHONG_VACCINE)
+                -- Nếu mất định nghĩa gốc, tạm lấy số còn lại làm mốc
+                ISNULL(gv.SoLieu, gkv.Solieuconlai) AS TongSoMui,
+                
+                -- 4. Số mũi khách hàng chưa tiêm
+                gkv.Solieuconlai AS SoMuiConLai,
+                
+                -- 5. Tính số mũi đã tiêm (Gốc - Còn lại)
+                (ISNULL(gv.SoLieu, gkv.Solieuconlai) - gkv.Solieuconlai) AS SoMuiDaDung,
+                
+                -- 6. Tính tổng tồn kho trên toàn bộ chi nhánh
+                ISNULL((
+                    SELECT SUM(SoLuongTonKho) 
+                    FROM CHINHANH_VACCINE 
+                    WHERE MaVC = gkv.MaVC
+                ), 0) as TonKhoHeThong
+                
+            FROM GOI_KHACHHANG_VACCINE gkv
+            -- Sử dụng LEFT JOIN để đảm bảo record của khách luôn hiện lên
+            LEFT JOIN VACCINE v ON gkv.MaVC = v.MaVC
+            LEFT JOIN GOITIEMPHONG_VACCINE gv ON gkv.MaGoi = gv.MaGoi AND gkv.MaVC = gv.MaVC
+            
+            WHERE gkv.MaKH = :kh AND gkv.MaGoi = :goi
+        """),
+        {"kh": ma_kh, "goi": ma_goi},
+    ).mappings().all()
+    return rows
+
 def kh_confirm_invoice(
     db: Session,
     ma_hoa_don: str,
