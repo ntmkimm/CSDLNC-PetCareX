@@ -66,9 +66,6 @@ def kh2_delete_pet(db: Session, ma_thu_cung: str, ma_kh: str):
     return {"ok": True}
 
 
-# ============================================================
-# KH3 - lịch sử tiêm của thú cưng
-# ============================================================
 def kh3_pet_vaccination_history(db: Session, ma_thu_cung: str, ma_kh: str):
     pet = db.execute(
         text("SELECT 1 FROM THUCUNG WHERE MaThuCung = :id AND MaKH = :makh"),
@@ -312,28 +309,57 @@ def kh15_cancel_appointment(db: Session, ma_phien: str, ma_kh: str):
 
     return {"ok": True}
 
-def kh16_create_booking(db: Session, ma_kh: str, ma_thu_cung: str, ma_dv: str):
-    # ---------------------------------------------------
-    # 0. TÌM CHI NHÁNH CUNG CẤP DỊCH VỤ
-    # ---------------------------------------------------
-    ma_cn = db.execute(
+def kh_get_chinhanh_by_product(db: Session, ma_sp: str):
+    return db.execute(
         text("""
-            SELECT TOP 1 MaCN
-            FROM CUNGCAPDICHVU
-            WHERE MaDV = :dv
-            ORDER BY MaCN
+            SELECT cn.MaCN, cn.TenCN, csp.SoLuongTonKho
+            FROM CHINHANH_SANPHAM csp
+            JOIN CHINHANH cn ON cn.MaCN = csp.MaCN
+            WHERE csp.MaSP = :sp
+              AND csp.SoLuongTonKho > 0
+        """),
+        {"sp": ma_sp},
+    ).mappings().all()
+
+def kh_get_chinhanh_by_service(db: Session, ma_dv: str):
+    return db.execute(
+        text("""
+            SELECT cn.MaCN, cn.TenCN
+            FROM CUNGCAPDICHVU c
+            JOIN CHINHANH cn ON cn.MaCN = c.MaCN
+            WHERE c.MaDV = :dv
         """),
         {"dv": ma_dv},
-    ).scalar()
+    ).mappings().all()
 
-    if not ma_cn:
+
+def kh16_create_booking(
+    db: Session,
+    ma_kh: str,
+    ma_thu_cung: str,
+    ma_dv: str,
+    ma_cn: str,
+):
+    # ---------------------------------------------------
+    # 0. KIỂM TRA CHI NHÁNH CÓ CUNG CẤP DỊCH VỤ
+    # ---------------------------------------------------
+    ok_cn = db.execute(
+        text("""
+            SELECT 1
+            FROM CUNGCAPDICHVU
+            WHERE MaDV = :dv AND MaCN = :cn
+        """),
+        {"dv": ma_dv, "cn": ma_cn},
+    ).first()
+
+    if not ok_cn:
         raise HTTPException(
             status_code=400,
-            detail="Dịch vụ này hiện chưa được cung cấp tại bất kỳ chi nhánh nào",
+            detail="Chi nhánh này không cung cấp dịch vụ đã chọn",
         )
 
     # ---------------------------------------------------
-    # 1. KIỂM TRA THÚ CƯNG THUỘC KHÁCH HÀNG
+    # 1. KIỂM TRA THÚ CƯNG
     # ---------------------------------------------------
     pet = db.execute(
         text("""
@@ -348,7 +374,7 @@ def kh16_create_booking(db: Session, ma_kh: str, ma_thu_cung: str, ma_dv: str):
         raise HTTPException(status_code=404, detail="Pet not found")
 
     # ---------------------------------------------------
-    # 2. LẤY GIÁ DỊCH VỤ
+    # 2. GIÁ DỊCH VỤ
     # ---------------------------------------------------
     gia = db.execute(
         text("SELECT DonGia FROM DICHVU WHERE MaDV = :dv"),
@@ -359,12 +385,12 @@ def kh16_create_booking(db: Session, ma_kh: str, ma_thu_cung: str, ma_dv: str):
         raise HTTPException(status_code=400, detail="Service price not found")
 
     try:
-        # ===================================================
-        # 3. TÌM HOẶC TẠO HÓA ĐƠN
-        # ===================================================
+        # ---------------------------------------------------
+        # 3. TÌM / TẠO HÓA ĐƠN BOOKING
+        # ---------------------------------------------------
         ma_hd = db.execute(
             text("""
-                SET NOCOUNT ON; -- Thêm dòng này
+                SET NOCOUNT ON;
                 SELECT TOP 1 h.MaHoaDon
                 FROM HOADON h
                 JOIN PHIENDICHVU pd ON h.MaHoaDon = pd.MaHoaDon
@@ -378,40 +404,40 @@ def kh16_create_booking(db: Session, ma_kh: str, ma_thu_cung: str, ma_dv: str):
         if not ma_hd:
             ma_hd = db.execute(
                 text("""
-                    SET NOCOUNT ON; -- QUAN TRỌNG: Tắt thông báo hàng bị tác động
+                    SET NOCOUNT ON;
                     DECLARE @out TABLE (ID VARCHAR(10));
 
                     INSERT INTO HOADON (MaKH, NgayLap, NhanVienLap, HinhThucThanhToan)
                     OUTPUT INSERTED.MaHoaDon INTO @out
-                    VALUES (:kh, GETDATE(), 'NV_SYSTEM', N'Tiền mặt');
+                    VALUES (:kh, GETDATE(), 'NV_SYSTEM', NULL);
 
                     SELECT ID FROM @out;
                 """),
                 {"kh": ma_kh},
             ).scalar()
 
-        # ===================================================
+        # ---------------------------------------------------
         # 4. TẠO PHIÊN DỊCH VỤ
-        # ===================================================
+        # ---------------------------------------------------
         ma_phien = db.execute(
             text("""
-                SET NOCOUNT ON; -- QUAN TRỌNG: Tắt thông báo hàng bị tác động
-                DECLARE @outPhien TABLE (MaPhien VARCHAR(10));
+                SET NOCOUNT ON;
+                DECLARE @out TABLE (MaPhien VARCHAR(10));
 
                 INSERT INTO PHIENDICHVU (
-                    MaHoaDon, MaThuCung, MaDV, GiaTien,
-                    TrangThai, MaCN, ThoiDiemBatDau
+                    MaHoaDon, MaThuCung, MaDV,
+                    GiaTien, TrangThai, MaCN, ThoiDiemBatDau
                 )
-                OUTPUT INSERTED.MaPhien INTO @outPhien
+                OUTPUT INSERTED.MaPhien INTO @out
                 VALUES (
-                    :mhd, :tc, :dv, :gia,
-                    N'BOOKING', :cn, GETDATE()
+                    :hd, :tc, :dv,
+                    :gia, N'BOOKING', :cn, GETDATE()
                 );
 
-                SELECT MaPhien FROM @outPhien;
+                SELECT MaPhien FROM @out;
             """),
             {
-                "mhd": ma_hd,
+                "hd": ma_hd,
                 "tc": ma_thu_cung,
                 "dv": ma_dv,
                 "gia": gia,
@@ -419,21 +445,19 @@ def kh16_create_booking(db: Session, ma_kh: str, ma_thu_cung: str, ma_dv: str):
             },
         ).scalar()
 
-        # ===================================================
-        # 5. CẬP NHẬT TỔNG TIỀN
-        # ===================================================
+        # ---------------------------------------------------
+        # 5. UPDATE TỔNG TIỀN
+        # ---------------------------------------------------
         db.execute(
             text("""
-                SET NOCOUNT ON;
                 UPDATE HOADON
-                SET TongTien = dbo.fn_CalculateHoaDonTotal(:mhd)
-                WHERE MaHoaDon = :mhd
+                SET TongTien = dbo.fn_CalculateHoaDonTotal(:hd)
+                WHERE MaHoaDon = :hd
             """),
-            {"mhd": ma_hd},
+            {"hd": ma_hd},
         )
 
         db.commit()
-
         return {
             "ok": True,
             "MaHoaDon": ma_hd,
@@ -451,41 +475,69 @@ def kh16_create_booking(db: Session, ma_kh: str, ma_thu_cung: str, ma_dv: str):
 def kh17_my_bookings(db: Session, ma_kh: str):
     return db.execute(
         text("""
-            SELECT 
-            pd.MaPhien,
-            pd.MaHoaDon,
-            pd.MaCN,
-            pd.TrangThai,
+            SELECT *
+            FROM (
+                /* ================= PHIÊN DỊCH VỤ / BÁN LẺ ================= */
+                SELECT 
+                    pd.MaPhien,
+                    pd.MaHoaDon,
+                    pd.MaCN,
+                    pd.TrangThai,
+                    tc.Ten AS TenThuCung,
 
-            tc.Ten AS TenThuCung,
+                    CASE 
+                        WHEN pd.MaDV = 'DV_RETAIL' THEN
+                            STRING_AGG(
+                                sp.TenSP + N' ×' + CAST(mh.SoLuong AS NVARCHAR),
+                                N', '
+                            )
+                        ELSE dv.TenDV
+                    END AS TenDV,
 
-            CASE 
-                WHEN pd.MaDV = 'DV_RETAIL' THEN
-                    STRING_AGG(sp.TenSP + N' ×' + CAST(mh.SoLuong AS NVARCHAR), N', ')
-                ELSE dv.TenDV
-            END AS TenDV,
+                    CASE 
+                        WHEN pd.MaDV = 'DV_RETAIL' THEN
+                            SUM(mh.SoLuong * sp.DonGia)
+                        ELSE pd.GiaTien
+                    END AS GiaTien,
 
-            CASE 
-                WHEN pd.MaDV = 'DV_RETAIL' THEN
-                    SUM(mh.SoLuong * sp.DonGia)
-                ELSE pd.GiaTien
-            END AS GiaTien
+                    h.NgayLap AS SortDate,
+                    1 AS SortType
 
-        FROM PHIENDICHVU pd
-        JOIN HOADON h ON h.MaHoaDon = pd.MaHoaDon
-        LEFT JOIN THUCUNG tc ON pd.MaThuCung = tc.MaThuCung
-        JOIN DICHVU dv ON pd.MaDV = dv.MaDV
-        LEFT JOIN MUAHANG mh ON mh.MaPhien = pd.MaPhien
-        LEFT JOIN SANPHAM sp ON sp.MaSP = mh.MaSP
+                FROM PHIENDICHVU pd
+                JOIN HOADON h ON h.MaHoaDon = pd.MaHoaDon
+                LEFT JOIN THUCUNG tc ON pd.MaThuCung = tc.MaThuCung
+                JOIN DICHVU dv ON pd.MaDV = dv.MaDV
+                LEFT JOIN MUAHANG mh ON mh.MaPhien = pd.MaPhien
+                LEFT JOIN SANPHAM sp ON sp.MaSP = mh.MaSP
 
-        WHERE h.MaKH = :kh
-        AND pd.TrangThai = N'BOOKING'
+                WHERE h.MaKH = :kh
+                  AND pd.TrangThai = N'BOOKING'
 
-        GROUP BY
-            pd.MaPhien, pd.MaHoaDon, pd.MaCN, pd.TrangThai,
-            tc.Ten, dv.TenDV, pd.MaDV, pd.GiaTien
+                GROUP BY
+                    pd.MaPhien, pd.MaHoaDon, pd.MaCN, pd.TrangThai,
+                    tc.Ten, dv.TenDV, pd.MaDV, pd.GiaTien, h.NgayLap
 
-        ORDER BY pd.MaPhien DESC
+                UNION ALL
+
+                /* ================= GÓI TIÊM ================= */
+                SELECT
+                    NULL AS MaPhien,
+                    h.MaHoaDon,
+                    NULL AS MaCN,
+                    N'BOOKING' AS TrangThai,
+                    NULL AS TenThuCung,
+                    g.TenGoi AS TenDV,
+                    dbo.fn_GiaGoiTiemPhong(g.MaGoi) AS GiaTien,
+                    h.NgayLap AS SortDate,
+                    2 AS SortType
+
+                FROM MUA_GOI mg
+                JOIN GOITIEMPHONG g ON g.MaGoi = mg.MaGoi
+                JOIN HOADON h ON h.MaHoaDon = mg.MaHoaDon
+                WHERE h.MaKH = :kh
+                AND h.HinhThucThanhToan IS NULL
+            ) x
+            ORDER BY x.SortDate DESC, x.SortType, x.MaPhien DESC
         """),
         {"kh": ma_kh},
     ).mappings().all()
@@ -502,36 +554,46 @@ def kh8_search_products(db: Session, keyword: str | None, loai: str | None):
     ).mappings().all()
     return rows
 
-def kh4_booking_product(db: Session, ma_kh: str, ma_sp: str, so_luong: int):
-    # 1. Kiểm tra sản phẩm
+def kh4_booking_product(
+    db: Session,
+    ma_kh: str,
+    ma_sp: str,
+    so_luong: int,
+    ma_cn: str,
+):
+    # ---------------------------------------------------
+    # 1. KIỂM TRA SẢN PHẨM
+    # ---------------------------------------------------
     sp = db.execute(
-        text("SELECT DonGia, TenSP FROM SANPHAM WHERE MaSP = :sp"),
+        text("SELECT TenSP FROM SANPHAM WHERE MaSP = :sp"),
         {"sp": ma_sp},
     ).fetchone()
+
     if not sp:
         raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
 
-    # 2. Tìm chi nhánh còn hàng
-    ma_cn = db.execute(
+    # ---------------------------------------------------
+    # 2. KIỂM TRA TỒN KHO TẠI CHI NHÁNH
+    # ---------------------------------------------------
+    ton = db.execute(
         text("""
-            SELECT TOP 1 MaCN
+            SELECT SoLuongTonKho
             FROM CHINHANH_SANPHAM
-            WHERE MaSP = :sp AND SoLuongTonKho >= :sl
-            ORDER BY SoLuongTonKho DESC
+            WHERE MaSP = :sp AND MaCN = :cn
         """),
-        {"sp": ma_sp, "sl": so_luong},
+        {"sp": ma_sp, "cn": ma_cn},
     ).scalar()
 
-    if not ma_cn:
+    if ton is None or ton < so_luong:
         raise HTTPException(
             status_code=400,
-            detail=f"Sản phẩm {sp.TenSP} đã hết hàng trên toàn hệ thống",
+            detail=f"Sản phẩm {sp.TenSP} không đủ tồn kho tại chi nhánh {ma_cn}",
         )
 
     try:
-        # ===================================================
-        # 3. TÌM / TẠO HOADON (GIỎ HÀNG)
-        # ===================================================
+        # ---------------------------------------------------
+        # 3. TÌM / TẠO HÓA ĐƠN BOOKING
+        # ---------------------------------------------------
         ma_hd = db.execute(
             text("""
                 SET NOCOUNT ON;
@@ -553,50 +615,50 @@ def kh4_booking_product(db: Session, ma_kh: str, ma_sp: str, so_luong: int):
 
                     INSERT INTO HOADON (MaKH, NhanVienLap, HinhThucThanhToan)
                     OUTPUT INSERTED.MaHoaDon INTO @out
-                    VALUES (:kh, 'NV_SYSTEM', N'Tiền mặt');
+                    VALUES (:kh, 'NV_SYSTEM', NULL);
 
                     SELECT ID FROM @out;
                 """),
                 {"kh": ma_kh},
             ).scalar()
 
-        # ===================================================
-        # 4. TÌM / TẠO PHIÊN BÁN LẺ (DV_RETAIL)
-        # ===================================================
+        # ---------------------------------------------------
+        # 4. TÌM / TẠO PHIÊN DV_RETAIL (THEO CHI NHÁNH)
+        # ---------------------------------------------------
         ma_phien = db.execute(
             text("""
-                SET NOCOUNT ON;
                 SELECT MaPhien
                 FROM PHIENDICHVU
-                WHERE MaHoaDon = :mhd
+                WHERE MaHoaDon = :hd
                   AND MaDV = 'DV_RETAIL'
                   AND MaCN = :cn
             """),
-            {"mhd": ma_hd, "cn": ma_cn},
+            {"hd": ma_hd, "cn": ma_cn},
         ).scalar()
 
         if not ma_phien:
             ma_phien = db.execute(
                 text("""
                     SET NOCOUNT ON;
-                    DECLARE @outP TABLE (ID VARCHAR(10));
+                    DECLARE @out TABLE (ID VARCHAR(10));
 
                     INSERT INTO PHIENDICHVU (
-                        MaHoaDon, MaDV, GiaTien, TrangThai, MaCN, MaThuCung
+                        MaHoaDon, MaDV, GiaTien,
+                        TrangThai, MaCN, MaThuCung
                     )
-                    OUTPUT INSERTED.MaPhien INTO @outP
+                    OUTPUT INSERTED.MaPhien INTO @out
                     VALUES (
-                        :mhd, 'DV_RETAIL', 0, N'BOOKING', :cn, NULL
+                        :hd, 'DV_RETAIL', 0, N'BOOKING', :cn, NULL
                     );
 
-                    SELECT ID FROM @outP;
+                    SELECT ID FROM @out;
                 """),
-                {"mhd": ma_hd, "cn": ma_cn},
+                {"hd": ma_hd, "cn": ma_cn},
             ).scalar()
 
-        # ===================================================
-        # 5. THÊM / CỘNG SỐ LƯỢNG MUA HÀNG
-        # ===================================================
+        # ---------------------------------------------------
+        # 5. THÊM / CỘNG SỐ LƯỢNG
+        # ---------------------------------------------------
         db.execute(
             text("""
                 IF EXISTS (
@@ -613,30 +675,25 @@ def kh4_booking_product(db: Session, ma_kh: str, ma_sp: str, so_luong: int):
             {"mp": ma_phien, "sp": ma_sp, "sl": so_luong},
         )
 
-        # ===================================================
-        # 6. CẬP NHẬT TỔNG TIỀN
-        # ===================================================
+        # ---------------------------------------------------
+        # 6. UPDATE TỔNG TIỀN
+        # ---------------------------------------------------
         db.execute(
             text("""
-                SET NOCOUNT ON;
                 UPDATE HOADON
-                SET TongTien = dbo.fn_CalculateHoaDonTotal(:mhd)
-                WHERE MaHoaDon = :mhd
+                SET TongTien = dbo.fn_CalculateHoaDonTotal(:hd)
+                WHERE MaHoaDon = :hd
             """),
-            {"mhd": ma_hd},
+            {"hd": ma_hd},
         )
 
         db.commit()
-        return {
-            "ok": True,
-            "MaCN": ma_cn,
-            "message": f"Sản phẩm sẽ được lấy từ chi nhánh {ma_cn}",
-        }
+        return {"ok": True, "MaCN": ma_cn}
 
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 
 def kh_buy_package(
     db: Session,
@@ -668,7 +725,7 @@ def kh_buy_package(
 
                     INSERT INTO HOADON (MaKH, NhanVienLap, HinhThucThanhToan)
                     OUTPUT INSERTED.MaHoaDon INTO @out
-                    VALUES (:kh, 'NV_SYSTEM', N'Tiền mặt');
+                    VALUES (:kh, 'NV_SYSTEM', NULL);
 
                     SELECT ID FROM @out;
                 """),

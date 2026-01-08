@@ -35,10 +35,11 @@ def create_booking(
     ma_kh: str,
     ma_thu_cung: str,
     ma_dv: str,
+    ma_cn: str,
     db: Session = Depends(get_db),
 ):
     return customer_service.kh16_create_booking(
-        db, ma_kh, ma_thu_cung, ma_dv
+        db, ma_kh, ma_thu_cung, ma_dv, ma_cn
     )
 
 @router.get("/me/bookings")
@@ -70,10 +71,10 @@ def booking_product(
     ma_kh: str,      # Cần mã khách hàng để biết giỏ hàng của ai
     ma_sp: str,
     so_luong: int,
+    ma_cn: str,
     db: Session = Depends(get_db),
 ):
-    return customer_service.kh4_booking_product(db, ma_kh, ma_sp, so_luong)
-
+    return customer_service.kh4_booking_product(db, ma_kh, ma_sp, so_luong, ma_cn)
 
 @router.delete("/appointments/{ma_phien}")
 def cancel_booking(ma_phien: str, ma_kh: str, db: Session = Depends(get_db)):
@@ -111,3 +112,14 @@ def buy_package(
 ):
     return customer_service.kh_buy_package(db, ma_kh, ma_goi)
 
+@router.get("/branches/by-service")
+def get_branch_by_service(ma_dv: str, db: Session = Depends(get_db)):
+    return {
+        "items": customer_service.kh_get_chinhanh_by_service(db, ma_dv)
+    }
+    
+@router.get("/branches/by-product")
+def get_branch_by_product(ma_sp: str, db: Session = Depends(get_db)):
+    return {
+        "items": customer_service.kh_get_chinhanh_by_product(db, ma_sp)
+    }

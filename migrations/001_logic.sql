@@ -196,7 +196,7 @@ GO
 -- 2. Cập nhật lại Procedure xác nhận hóa đơn (Đa chi nhánh)
 CREATE OR ALTER PROCEDURE dbo.sp_ConfirmHoaDon
     @MaHoaDon        VARCHAR(10),
-    @HinhThucTT      NVARCHAR(50),
+    @HinhThucTT      NVARCHAR(50) = N'Chuyển khoản',
     @NhanVienLap     VARCHAR(10) = 'NV_SYSTEM'
 AS
 BEGIN
@@ -207,12 +207,21 @@ BEGIN
         BEGIN TRAN;
 
         -- 0. Check còn phiên cần thanh toán không
-        IF NOT EXISTS (
-            SELECT 1 FROM PHIENDICHVU
-            WHERE MaHoaDon = @MaHoaDon
-              AND TrangThai = N'BOOKING'
+        IF NOT (
+            EXISTS (
+                SELECT 1
+                FROM PHIENDICHVU
+                WHERE MaHoaDon = @MaHoaDon
+                AND TrangThai = N'BOOKING'
+            )
+            OR
+            EXISTS (
+                SELECT 1
+                FROM MUA_GOI
+                WHERE MaHoaDon = @MaHoaDon
+            )
         )
-            THROW 50020, N'Hóa đơn không còn phiên nào cần thanh toán', 1;
+            THROW 50020, N'Hóa đơn không còn phiên hoặc gói nào cần thanh toán', 1;
 
         -- 1. Check tồn kho
         IF EXISTS (
@@ -268,7 +277,7 @@ BEGIN
         THROW;
     END CATCH
 END;
-
+GO
 
 CREATE OR ALTER PROCEDURE dbo.sp_MuaGoiTiemPhong
     @MaKH VARCHAR(10),
