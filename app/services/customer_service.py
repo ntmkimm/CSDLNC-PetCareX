@@ -223,19 +223,61 @@ def kh10_pet_medical_history(db: Session, ma_thu_cung: str, ma_kh: str):
 def kh11_purchase_history(db: Session, ma_kh: str):
     rows = db.execute(
         text("""
-            SELECT h.MaHoaDon, h.NgayLap,
-                   sp.MaSP, sp.TenSP,
-                   mh.SoLuong, sp.DonGia,
-                   (mh.SoLuong * sp.DonGia) AS ThanhTien
-            FROM HOADON h
-            JOIN PHIENDICHVU pd ON h.MaHoaDon = pd.MaHoaDon
-            JOIN MUAHANG mh ON pd.MaPhien = mh.MaPhien
-            JOIN SANPHAM sp ON mh.MaSP = sp.MaSP
-            WHERE h.MaKH = :kh AND pd.TrangThai = N'CONFIRMED'
-            ORDER BY h.NgayLap DESC
+            SELECT *
+            FROM (
+                /* =======================================================
+                   1. MUA LẺ SẢN PHẨM (DV_RETAIL)
+                   ======================================================= */
+                SELECT
+                    h.MaHoaDon,
+                    h.NgayLap,
+                    N'SAN_PHAM' AS Loai,
+
+                    sp.MaSP AS MaItem,
+                    sp.TenSP AS TenItem,
+
+                    mh.SoLuong,
+                    sp.DonGia,
+                    (mh.SoLuong * sp.DonGia) AS ThanhTien,
+
+                    pd.MaCN
+                FROM HOADON h
+                JOIN PHIENDICHVU pd ON h.MaHoaDon = pd.MaHoaDon
+                JOIN MUAHANG mh ON pd.MaPhien = mh.MaPhien
+                JOIN SANPHAM sp ON mh.MaSP = sp.MaSP
+                WHERE h.MaKH = :kh
+                  AND h.HinhThucThanhToan IS NOT NULL
+                  AND pd.TrangThai = N'CONFIRMED'
+
+                UNION ALL
+
+                /* =======================================================
+                   2. MUA GÓI TIÊM
+                   ======================================================= */
+                SELECT
+                    h.MaHoaDon,
+                    h.NgayLap,
+                    N'GOI_TIEM' AS Loai,
+
+                    g.MaGoi AS MaItem,
+                    g.TenGoi AS TenItem,
+
+                    1 AS SoLuong,
+                    dbo.fn_GiaGoiTiemPhong(g.MaGoi) AS DonGia,
+                    dbo.fn_GiaGoiTiemPhong(g.MaGoi) AS ThanhTien,
+
+                    NULL AS MaCN
+                FROM HOADON h
+                JOIN MUA_GOI mg ON h.MaHoaDon = mg.MaHoaDon
+                JOIN GOITIEMPHONG g ON g.MaGoi = mg.MaGoi
+                WHERE h.MaKH = :kh
+                  AND h.HinhThucThanhToan IS NOT NULL
+            ) x
+            ORDER BY x.NgayLap DESC, x.MaHoaDon DESC
         """),
         {"kh": ma_kh},
     ).mappings().all()
+
     return rows
 
 
@@ -778,6 +820,7 @@ def kh_confirm_invoice(
                 "nv": "NV_SYSTEM",
             },
         )
+        db.commit()
         return {"ok": True}
     except DBAPIError as e:
         raise HTTPException(status_code=400, detail=str(e.orig))
