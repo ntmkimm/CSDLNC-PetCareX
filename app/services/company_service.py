@@ -74,33 +74,55 @@ def get_membership_stats(db: Session):
         GROUP BY Bac
     """)
     return db.execute(query).mappings().all()
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 
-# CT5: Tra cứu nhân sự [cite: 105, 137]
-def search_staff(db: Session, keyword: str = None):
-    sql = """
-        SELECT nv.MaNV, nv.HoTen, nv.ChucVu, cn.TenCN, nv.Luong
+# CT5: Tra cứu nhân sự (Bổ sung TenCN để hiển thị lên bảng Front-end)
+def search_staff(db: Session, keyword: str = ""):
+    query = text("""
+        SELECT nv.*, cn.TenCN 
         FROM NHANVIEN nv
         LEFT JOIN CHINHANH cn ON nv.MaCN = cn.MaCN
-        WHERE 1=1
-    """
-    params = {}
-    if keyword:
-        sql += " AND (nv.HoTen LIKE :kw OR nv.MaNV = :kw_raw)"
-        params = {"kw": f"%{keyword}%", "kw_raw": keyword}
-    
-    return db.execute(text(sql), params).mappings().all()
+        WHERE nv.HoTen LIKE :kw OR nv.MaNV LIKE :kw
+    """)
+    result = db.execute(query, {"kw": f"%{keyword}%"})
+    return result.mappings().all()
 
-# CT6: Quản lý nhân sự (cập nhật lương, phân công chi nhánh) [cite: 106, 137]
-def update_staff_assignment(db: Session, ma_nv: str, ma_cn_moi: str, luong_moi: float):
-    # Cập nhật thông tin nhân viên
+# CT5: Thêm nhân viên mới
+def create_staff(db: Session, staff_data: dict):
+    query = text("""
+        INSERT INTO NHANVIEN (MaNV, HoTen, NgaySinh, GioiTinh, ChucVu, MaCN, Luong)
+        VALUES (:ma_nv, :ho_ten, :ngay_sinh, :gioi_tinh, :chuc_vu, :ma_cn, :luong)
+    """)
+    db.execute(query, {
+        "ma_nv": staff_data.get('MaNV'),
+        "ho_ten": staff_data.get('HoTen'),
+        "ngay_sinh": staff_data.get('NgaySinh'),
+        "gioi_tinh": staff_data.get('GioiTinh'),
+        "chuc_vu": staff_data.get('ChucVu'),
+        "ma_cn": staff_data.get('MaCN'),
+        "luong": staff_data.get('Luong')
+    })
+    db.commit()
+    return {"status": "success"}
+
+# CT5 & CT6: Chỉnh sửa lương và chi nhánh (Hàm linh hoạt)
+def update_staff(db: Session, ma_nv: str, ma_cn: str, luong: float):
     query = text("""
         UPDATE NHANVIEN 
         SET MaCN = :ma_cn, Luong = :luong
         WHERE MaNV = :ma_nv
     """)
-    db.execute(query, {"ma_cn": ma_cn_moi, "luong": luong_moi, "ma_nv": ma_nv})
+    db.execute(query, {"ma_cn": ma_cn, "luong": luong, "ma_nv": ma_nv})
     db.commit()
-    return {"status": "success", "message": f"Đã điều chuyển nhân viên {ma_nv}"}
+    return {"status": "success"}
+
+# CT5: Xóa nhân viên
+def delete_staff(db: Session, ma_nv: str):
+    query = text("DELETE FROM NHANVIEN WHERE MaNV = :ma_nv")
+    db.execute(query, {"ma_nv": ma_nv})
+    db.commit()
+    return {"status": "success"}
 
 # CT7: Tra cứu số khách hàng của từng chi nhánh [cite: 107, 137]
 def get_customer_count_by_branch(db: Session):
@@ -123,4 +145,8 @@ def get_total_pets_stats(db: Session):
         UNION ALL
         SELECT N'TỔNG CỘNG', COUNT(*) FROM THUCUNG
     """)
+    return db.execute(query).mappings().all()
+
+def get_all_branches(db: Session):
+    query = text("SELECT MaCN, TenCN FROM CHINHANH")
     return db.execute(query).mappings().all()
