@@ -45,16 +45,6 @@ def create_booking(
 @router.get("/me/bookings")
 def my_bookings(ma_kh: str, db: Session = Depends(get_db)):
     return {"items": customer_service.kh17_my_bookings(db, ma_kh)}
-
-@router.post("/appointments/{ma_phien}/confirm")
-def confirm_appointment(
-    ma_phien: str,
-    hinh_thuc_thanh_toan: str,
-    db: Session = Depends(get_db),
-):
-    return customer_service.kh18_confirm_booking(
-        db, ma_phien, hinh_thuc_thanh_toan
-    )
     
 @router.get("/pets/{ma_thu_cung}/medical-history")
 def pet_medical_history(ma_thu_cung: str, ma_kh: str, db: Session = Depends(get_db)):

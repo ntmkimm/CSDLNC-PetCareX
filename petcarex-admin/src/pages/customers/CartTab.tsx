@@ -1,74 +1,52 @@
-// src/pages/customers/CartTab.tsx
-import React from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
-  Card,
-  Table,
-  Button,
-  Form,
-  message,
-  Tag,
-  Tabs,
-  Select,
-  InputNumber,
-  Divider,
-  Typography,
-  Popconfirm,
+  Card, Table, Button, Form, message, Tag, Tabs, Select,
+  InputNumber, Divider, Typography, Popconfirm, Radio, Space
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { useRouter } from 'next/router'
-import { api } from '../../lib/api' // Đảm bảo đường dẫn này đúng với project của bạn
-import { clearToken } from '../../lib/auth'
+import { api } from '../../lib/api'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 /* ===================== TYPES ===================== */
-
-type Pet = { MaThuCung: string; Ten?: string }
-type Service = { MaDV: string; TenDV: string }
-type Product = { MaSP: string; TenSP: string; DonGia: number }
-type Package = { MaGoi: string; TenGoi: string; ThoiGian: number; KhuyenMai: number }
-type Branch = { MaCN: string; TenCN: string; SoLuongTonKho?: number }
-
 type BookingRow = {
-  MaPhien?: string
-  MaHoaDon: string
-  TenThuCung?: string
-  TenDV: string
-  GiaTien: number
-  TrangThai: 'BOOKING' | 'CONFIRMED' | 'CANCELLED'
-  MaCN?: string
+  MaPhien?: string; MaHoaDon: string; TenThuCung?: string;
+  TenDV: string; GiaTien: number; TrangThai: string; MaCN?: string;
 }
 
 interface CartTabProps {
-  maKH: string
+  maKH: string;
+  maNV?: string; // Mã nhân viên thao tác hộ
+  maCN?: string; // Chi nhánh nhân viên đang trực
 }
 
-/* ===================== COMPONENT ===================== */
+export default function CartTab({ maKH, maNV, maCN }: CartTabProps) {
+  const [pets, setPets] = useState([])
+  const [services, setServices] = useState([])
+  const [products, setProducts] = useState([])
+  const [packages, setPackages] = useState([])
+  const [branches, setBranches] = useState([])
+  const [bookings, setBookings] = useState<BookingRow[]>([])
+  const [currentMaHD, setCurrentMaHD] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-export default function CartTab({ maKH }: CartTabProps) {
-  const router = useRouter()
-
-  const [pets, setPets] = React.useState<Pet[]>([])
-  const [services, setServices] = React.useState<Service[]>([])
-  const [products, setProducts] = React.useState<Product[]>([])
-  const [packages, setPackages] = React.useState<Package[]>([])
-  const [branches, setBranches] = React.useState<Branch[]>([])
-
-  const [bookings, setBookings] = React.useState<BookingRow[]>([])
-  const [currentMaHD, setCurrentMaHD] = React.useState<string | null>(null)
-
-  const [loading, setLoading] = React.useState(false)
+  // Hình thức thanh toán: Mặc định Tiền mặt cho NV, Chuyển khoản cho Khách
+  const [paymentMethod, setPaymentMethod] = useState(maNV ? 'Tiền mặt' : 'Chuyển khoản')
 
   const [bookingForm] = Form.useForm()
   const [buyForm] = Form.useForm()
   const [buyPackageForm] = Form.useForm()
 
-  /* ===================== FETCH ===================== */
-
-  React.useEffect(() => {
-    if (maKH) {
-      fetchData(maKH)
+  // Khi component load, nếu có maCN từ nhân viên thì gán ngay vào form
+  useEffect(() => {
+    if (maCN) {
+      bookingForm.setFieldsValue({ ma_cn: maCN })
+      buyForm.setFieldsValue({ ma_cn: maCN })
     }
+  }, [maCN, bookingForm, buyForm])
+
+  useEffect(() => {
+    if (maKH) fetchData(maKH)
   }, [maKH])
 
   const fetchData = async (mkh: string) => {
@@ -80,27 +58,17 @@ export default function CartTab({ maKH }: CartTabProps) {
         api.get('/customer/packages'),
         api.get('/customer/me/bookings', { params: { ma_kh: mkh } }),
       ])
-
       setPets(petsRes.data.items || [])
       setServices(svcsRes.data.items || [])
       setProducts(prodsRes.data.items || [])
       setPackages(pkgsRes.data.items || [])
-
       const bks = bookingsRes.data.items ?? []
       setBookings(bks)
-      // Lấy mã hóa đơn hiện tại từ dòng đầu tiên nếu có
       setCurrentMaHD(bks.length ? bks[0].MaHoaDon : null)
-    } catch (e) {
-      console.error('Fetch error:', e)
-    }
+    } catch (e) { console.error(e) }
   }
 
-  /* ===================== COMPUTED ===================== */
-
-  const tempTotal = React.useMemo(
-    () => bookings.reduce((s, b) => s + (b.GiaTien || 0), 0),
-    [bookings],
-  )
+  const tempTotal = useMemo(() => bookings.reduce((s, b) => s + (b.GiaTien || 0), 0), [bookings])
 
   /* ===================== ACTIONS ===================== */
 
@@ -108,60 +76,47 @@ export default function CartTab({ maKH }: CartTabProps) {
     setLoading(true)
     try {
       await api.post('/customer/appointments', null, {
-        params: {
-          ma_kh: maKH,
-          ma_thu_cung: v.ma_thu_cung,
-          ma_dv: v.ma_dv,
-          ma_cn: v.ma_cn,
+        params: { 
+            ma_kh: maKH, ma_thu_cung: v.ma_thu_cung, ma_dv: v.ma_dv, 
+            ma_cn: v.ma_cn, ma_nv: maNV || 'NV_SYSTEM' 
         },
       })
       message.success('Đã thêm dịch vụ')
-      bookingForm.resetFields()
-      setBranches([])
+      bookingForm.resetFields(['ma_thu_cung', 'ma_dv'])
+      if (maCN) bookingForm.setFieldsValue({ ma_cn: maCN })
       fetchData(maKH)
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? 'Lỗi')
-    } finally {
-      setLoading(false)
-    }
+    } catch (e: any) { message.error(e?.response?.data?.detail || 'Lỗi đặt lịch') }
+    finally { setLoading(false) }
   }
 
   const submitBuyProduct = async (v: any) => {
     setLoading(true)
     try {
       await api.post('/customer/orders/products', null, {
-        params: {
-          ma_kh: maKH,
-          ma_sp: v.ma_sp,
-          so_luong: v.so_luong,
-          ma_cn: v.ma_cn,
+        params: { 
+            ma_kh: maKH, ma_sp: v.ma_sp, so_luong: v.so_luong, 
+            ma_cn: v.ma_cn, ma_nv: maNV || 'NV_SYSTEM' 
         },
       })
       message.success('Đã thêm sản phẩm')
-      buyForm.resetFields()
-      setBranches([])
+      buyForm.resetFields(['ma_sp', 'so_luong'])
+      if (maCN) buyForm.setFieldsValue({ ma_cn: maCN })
       fetchData(maKH)
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? 'Lỗi')
-    } finally {
-      setLoading(false)
-    }
+    } catch (e: any) { message.error(e?.response?.data?.detail || 'Lỗi mua hàng') }
+    finally { setLoading(false) }
   }
 
   const submitBuyPackage = async (v: any) => {
     setLoading(true)
     try {
       await api.post('/customer/packages/buy', null, {
-        params: { ma_kh: maKH, ma_goi: v.ma_goi },
+        params: { ma_kh: maKH, ma_goi: v.ma_goi, ma_nv: maNV || 'NV_SYSTEM' },
       })
       message.success('Đã thêm gói tiêm')
       buyPackageForm.resetFields()
       fetchData(maKH)
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? 'Lỗi')
-    } finally {
-      setLoading(false)
-    }
+    } catch (e: any) { message.error(e?.response?.data?.detail || 'Lỗi mua gói') }
+    finally { setLoading(false) }
   }
 
   const confirmPayment = async () => {
@@ -171,205 +126,145 @@ export default function CartTab({ maKH }: CartTabProps) {
       await api.post('/customer/orders/confirm', null, {
         params: {
           ma_hoa_don: currentMaHD,
-          hinh_thuc_thanh_toan: 'Chuyển khoản',
+          hinh_thuc_thanh_toan: paymentMethod,
+          ma_nv: maNV || 'NV_SYSTEM'
         },
       })
       message.success('Thanh toán thành công')
       fetchData(maKH)
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? 'Thanh toán thất bại')
-    } finally {
-      setLoading(false)
-    }
+    } catch (e: any) { message.error(e?.response?.data?.detail || 'Lỗi thanh toán') }
+    finally { setLoading(false) }
   }
 
   const cancelBooking = async (maPhien?: string) => {
     if (!maPhien) return
     try {
-      await api.delete(`/customer/appointments/${maPhien}`, {
-        params: { ma_kh: maKH },
-      })
+      await api.delete(`/customer/appointments/${maPhien}`, { params: { ma_kh: maKH } })
       message.success('Đã hủy')
       fetchData(maKH)
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? 'Không thể hủy')
-    }
+    } catch (e: any) { message.error('Không thể hủy') }
   }
 
-  /* ===================== TABLE ===================== */
+  /* ===================== RENDER HELPERS ===================== */
+
+  const BranchItem = () => (
+    <Form.Item name="ma_cn" rules={[{ required: true }]} style={{ marginBottom: 0 }}>
+      {maCN ? (
+        <Tag color="blue" style={{ padding: '4px 10px', fontSize: '13px', margin: 0 }}>
+          📍 Chi nhánh: {maCN}
+        </Tag>
+      ) : (
+        <Select placeholder="Chọn chi nhánh" style={{ width: 180 }}
+          options={branches.map((b: any) => ({ label: b.TenCN, value: b.MaCN }))}
+        />
+      )}
+    </Form.Item>
+  )
 
   const bookingColumns: ColumnsType<BookingRow> = [
     { title: 'Phiên', dataIndex: 'MaPhien', width: 90 },
-    {
-      title: 'Đối tượng',
-      dataIndex: 'TenThuCung',
-      render: (v) => (v ? <Tag color="cyan">{v}</Tag> : <Text>—</Text>),
-    },
+    { title: 'Đối tượng', dataIndex: 'TenThuCung', render: (v) => v ? <Tag color="cyan">{v}</Tag> : <Text>—</Text> },
     { title: 'Nội dung', dataIndex: 'TenDV', render: (v) => <Text strong>{v}</Text> },
-    { title: 'Chi nhánh', dataIndex: 'MaCN', render: (v) => (v ? <Tag>{v}</Tag> : '—') },
-    {
-      title: 'Giá',
-      dataIndex: 'GiaTien',
-      align: 'right',
-      render: (v) => `${(v || 0).toLocaleString()}đ`,
-    },
+    { title: 'Chi nhánh', dataIndex: 'MaCN', render: (v) => <Tag>{v}</Tag> },
+    { title: 'Giá', dataIndex: 'GiaTien', align: 'right', render: (v) => `${(v || 0).toLocaleString()}đ` },
     {
       title: 'Thao tác',
-      render: (_, r) =>
-        r.MaPhien ? (
-          <Popconfirm title="Hủy mục này?" onConfirm={() => cancelBooking(r.MaPhien)}>
-            <Button danger size="small">
-              Hủy
-            </Button>
-          </Popconfirm>
-        ) : null,
+      render: (_, r) => r.MaPhien && (
+        <Popconfirm title="Gỡ bỏ?" onConfirm={() => cancelBooking(r.MaPhien)}>
+          <Button danger size="small" type="text">Hủy</Button>
+        </Popconfirm>
+      ),
     },
   ]
 
-  /* ===================== UI ===================== */
-
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Tabs type="card">
-        {/* ================= DỊCH VỤ ================= */}
+        {/* TAB DỊCH VỤ */}
         <Tabs.TabPane key="svc" tab="Dịch vụ">
-          <Form form={bookingForm} layout="inline" onFinish={submitBooking}>
+          <Form form={bookingForm} layout="inline" onFinish={submitBooking} style={{ rowGap: 10 }}>
             <Form.Item name="ma_thu_cung" rules={[{ required: true }]}>
-              <Select
-                placeholder="Thú cưng"
-                style={{ width: 160 }}
-                options={pets.map((p) => ({ label: p.Ten, value: p.MaThuCung }))}
-              />
+              <Select placeholder="Thú cưng" style={{ width: 140 }} options={pets.map((p: any) => ({ label: p.Ten, value: p.MaThuCung }))} />
             </Form.Item>
-
             <Form.Item name="ma_dv" rules={[{ required: true }]}>
-              <Select
-                placeholder="Dịch vụ"
-                style={{ width: 220 }}
-                options={services.map((s) => ({ label: s.TenDV, value: s.MaDV }))}
+              <Select placeholder="Dịch vụ" style={{ width: 180 }} options={services.map((s: any) => ({ label: s.TenDV, value: s.MaDV }))}
                 onChange={async (ma_dv) => {
-                  const res = await api.get('/customer/branches/by-service', {
-                    params: { ma_dv },
-                  })
-                  setBranches(res.data.items)
-                  bookingForm.setFieldsValue({ ma_cn: undefined })
+                  if (maCN) return;
+                  const res = await api.get('/customer/branches/by-service', { params: { ma_dv } })
+                  setBranches(res.data.items); bookingForm.setFieldsValue({ ma_cn: undefined })
                 }}
               />
             </Form.Item>
-
-            <Form.Item name="ma_cn" rules={[{ required: true }]}>
-              <Select
-                placeholder="Chi nhánh"
-                style={{ width: 200 }}
-                options={branches.map((b) => ({
-                  label: b.TenCN,
-                  value: b.MaCN,
-                }))}
-              />
-            </Form.Item>
-
-            <Button type="primary" htmlType="submit" loading={loading}>
-              Thêm
-            </Button>
+            <BranchItem />
+            <Button type="primary" htmlType="submit" loading={loading}>Thêm</Button>
           </Form>
         </Tabs.TabPane>
 
-        {/* ================= SẢN PHẨM ================= */}
+        {/* TAB SẢN PHẨM */}
         <Tabs.TabPane key="prd" tab="Sản phẩm">
-          <Form form={buyForm} layout="inline" onFinish={submitBuyProduct}>
+          <Form form={buyForm} layout="inline" onFinish={submitBuyProduct} style={{ rowGap: 10 }}>
             <Form.Item name="ma_sp" rules={[{ required: true }]}>
-              <Select
-                showSearch
-                placeholder="Sản phẩm"
-                style={{ width: 300 }}
-                options={products.map((p) => ({
-                  label: `${p.TenSP} (${(p.DonGia || 0).toLocaleString()}đ)`,
-                  value: p.MaSP,
-                }))}
+              <Select showSearch placeholder="Tìm sản phẩm" style={{ width: 220 }}
+                options={products.map((p: any) => ({ label: `${p.TenSP} (${p.DonGia.toLocaleString()}đ)`, value: p.MaSP }))}
                 onChange={async (ma_sp) => {
-                  const res = await api.get('/customer/branches/by-product', {
-                    params: { ma_sp },
-                  })
-                  setBranches(res.data.items)
-                  buyForm.setFieldsValue({ ma_cn: undefined })
+                  if (maCN) return;
+                  const res = await api.get('/customer/branches/by-product', { params: { ma_sp } })
+                  setBranches(res.data.items); buyForm.setFieldsValue({ ma_cn: undefined })
                 }}
               />
             </Form.Item>
-
-            <Form.Item name="ma_cn" rules={[{ required: true }]}>
-              <Select
-                placeholder="Chi nhánh"
-                style={{ width: 220 }}
-                options={branches.map((b) => ({
-                  label: `${b.TenCN} (Tồn ${b.SoLuongTonKho})`,
-                  value: b.MaCN,
-                }))}
-              />
-            </Form.Item>
-
-            <Form.Item name="so_luong" initialValue={1}>
-              <InputNumber min={1} />
-            </Form.Item>
-
-            <Button type="primary" htmlType="submit" loading={loading}>
-              Thêm
-            </Button>
+            <BranchItem />
+            <Form.Item name="so_luong" initialValue={1}><InputNumber min={1} style={{ width: 60 }} /></Form.Item>
+            <Button type="primary" htmlType="submit" loading={loading}>Thêm</Button>
           </Form>
         </Tabs.TabPane>
 
-        {/* ================= GÓI TIÊM ================= */}
-        <Tabs.TabPane key="pkg" tab="💉 Gói tiêm">
+        {/* TAB GÓI TIÊM */}
+        <Tabs.TabPane key="pkg" tab="💉 Gói vaccine">
           <Form form={buyPackageForm} layout="inline" onFinish={submitBuyPackage}>
             <Form.Item name="ma_goi" rules={[{ required: true }]}>
-              <Select
-                placeholder="Chọn gói"
-                style={{ width: 380 }}
-                options={packages.map((p) => ({
-                  label: `${p.TenGoi} (${p.ThoiGian} tháng – KM ${p.KhuyenMai}%)`,
-                  value: p.MaGoi,
-                }))}
-              />
+              <Select placeholder="Chọn gói" style={{ width: 300 }} options={packages.map((p: any) => ({ label: `${p.TenGoi} (${p.ThoiGian} th)`, value: p.MaGoi }))} />
             </Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading}>
-              Mua gói
-            </Button>
+            <Button type="primary" htmlType="submit" loading={loading}>Mua gói</Button>
           </Form>
         </Tabs.TabPane>
       </Tabs>
 
-      <Divider />
-
-      <Table
-        dataSource={bookings}
-        columns={bookingColumns}
-        rowKey={(r) => r.MaPhien ?? `${r.MaHoaDon}-${r.TenDV}`}
+      <Table 
+        dataSource={bookings} 
+        columns={bookingColumns} 
+        rowKey={(r, i) => r.MaPhien || i} 
         pagination={false}
         summary={() => (
           <Table.Summary.Row>
-            <Table.Summary.Cell colSpan={4} align="right">
-              <Text strong>Tạm tính</Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell colSpan={2} align="right">
-              <Text strong style={{ color: '#f5222d', fontSize: 18 }}>
-                {tempTotal.toLocaleString()}đ
-              </Text>
+            <Table.Summary.Cell colSpan={4} align="right"><Text strong>Tổng cộng</Text></Table.Summary.Cell>
+            <Table.Summary.Cell colSpan={1} align="right">
+                <Text strong style={{ color: '#f5222d', fontSize: 18 }}>{tempTotal.toLocaleString()}đ</Text>
             </Table.Summary.Cell>
           </Table.Summary.Row>
         )}
       />
 
       {currentMaHD && bookings.length > 0 && (
-        <div style={{ marginTop: 24, textAlign: 'right' }}>
-          <Button
-            type="primary"
-            danger
-            size="large"
-            loading={loading}
-            onClick={confirmPayment}
-          >
-            XÁC NHẬN THANH TOÁN
-          </Button>
-        </div>
+        <Card size="small" style={{ background: '#fffbe6' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Space size="large">
+                <Text strong>Phương thức thanh toán:</Text>
+                {maNV ? (
+                  <Radio.Group value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+                    <Radio value="Tiền mặt">Tiền mặt</Radio>
+                    <Radio value="Chuyển khoản">Chuyển khoản</Radio>
+                  </Radio.Group>
+                ) : (
+                  <Tag color="orange">Chuyển khoản</Tag>
+                )}
+            </Space>
+
+            <Button type="primary" danger size="large" onClick={confirmPayment} loading={loading}>
+              XÁC NHẬN THANH TOÁN {maNV && `(BỞI ${maNV})`}
+            </Button>
+          </div>
+        </Card>
       )}
     </div>
   )

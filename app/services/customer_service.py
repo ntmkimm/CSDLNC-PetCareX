@@ -386,6 +386,7 @@ def kh16_create_booking(
     ma_thu_cung: str,
     ma_dv: str,
     ma_cn: str,
+    ma_nv: Optional[str] = 'NV_SYSTEM'
 ):
     # ---------------------------------------------------
     # 0. KIỂM TRA CHI NHÁNH CÓ CUNG CẤP DỊCH VỤ
@@ -456,11 +457,11 @@ def kh16_create_booking(
 
                     INSERT INTO HOADON (MaKH, NgayLap, NhanVienLap, HinhThucThanhToan)
                     OUTPUT INSERTED.MaHoaDon INTO @out
-                    VALUES (:kh, GETDATE(), 'NV_SYSTEM', NULL);
+                    VALUES (:kh, GETDATE(), :nv, NULL);
 
                     SELECT ID FROM @out;
                 """),
-                {"kh": ma_kh},
+                {"kh": ma_kh, "nv": ma_nv},
             ).scalar()
 
         # ---------------------------------------------------
@@ -607,6 +608,7 @@ def kh4_booking_product(
     ma_sp: str,
     so_luong: int,
     ma_cn: str,
+    ma_nv: Optional[str] = 'NV_SYSTEM',
 ):
     # ---------------------------------------------------
     # 1. KIỂM TRA SẢN PHẨM
@@ -662,11 +664,11 @@ def kh4_booking_product(
 
                     INSERT INTO HOADON (MaKH, NhanVienLap, HinhThucThanhToan)
                     OUTPUT INSERTED.MaHoaDon INTO @out
-                    VALUES (:kh, 'NV_SYSTEM', NULL);
+                    VALUES (:kh, :nv, NULL);
 
                     SELECT ID FROM @out;
                 """),
-                {"kh": ma_kh},
+                {"kh": ma_kh, "nv": ma_nv},
             ).scalar()
 
         # ---------------------------------------------------
