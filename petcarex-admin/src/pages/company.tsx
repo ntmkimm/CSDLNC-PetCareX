@@ -1,313 +1,309 @@
-// src/pages/company.tsx
-import React from 'react'
-import dynamic from 'next/dynamic'
-import { Card, Row, Col, Table, Button, InputNumber, message, Space, Tag, Typography } from 'antd'
-import { api } from '../lib/api'
-import { useRouter } from 'next/router'
-import { getAuth, clearToken } from '../lib/auth'
+import React, { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import { 
+  Card, Row, Col, Table, Button, InputNumber, message, 
+  Space, Tag, Typography, Statistic, Input, Modal, Form,
+  ConfigProvider, theme, Switch
+} from 'antd';
+import { 
+  BarChartOutlined, TeamOutlined, DollarOutlined, 
+  SwapOutlined, ReloadOutlined, BulbOutlined, BulbFilled,
+  PieChartOutlined, UserOutlined
+} from '@ant-design/icons';
+import { api } from '../lib/api';
+import { useRouter } from 'next/router';
+import { getAuth, clearToken } from '../lib/auth';
 
-const BranchBar = dynamic(() => import('../components/charts/BranchBar'), { ssr: false })
-const MembershipPie = dynamic(() => import('../components/charts/MembershipPie'), { ssr: false })
+const BranchBar = dynamic(() => import('../components/charts/BranchBar'), { ssr: false });
+const MembershipPie = dynamic(() => import('../components/charts/MembershipPie'), { ssr: false });
 
-type Branch = { MaCN?: string; TenCN?: string; DoanhThu?: number }
-type TotalData = { TongDoanhThu?: number } | Record<string, any>
-type Service = { MaDV?: string; TenDV?: string; SoLan?: number; DoanhThu?: number }
-type Membership = { Bac?: string; SoLuong?: number }
-type CustomerBranch = { MaCN?: string; SoKhach?: number } | { MaCN?: string; SoKhachHang?: number }
-type PetStat = { Loai?: string; SoLuong?: number }
+const { Title, Text } = Typography;
 
-export default function CompanyPage() {
-  const router = useRouter()
-  const auth = getAuth()
-  const payload = auth.payload
-  const warnedRef = React.useRef(false)
+export default function CompanyDashboard() {
+  const router = useRouter();
+  const auth = getAuth();
+  const payload = auth.payload;
+  const warnedRef = useRef(false);
 
-  const role = payload?.role
-  const maCNFromToken = (payload as any)?.maCN as string | undefined
-  const canAccess = !!auth.token && !!payload && !auth.isExpired && (role === 'staff' || role === 'branch_manager')
+  // ======= Dark Mode State =======
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { defaultAlgorithm, darkAlgorithm } = theme;
 
-  // ======= Guard =======
-  React.useEffect(() => {
-    if (canAccess) return
+  const role = payload?.role;
+  const maCNFromToken = (payload as any)?.maCN;
+  const isCompanyAdmin = role === 'staff' || role === 'branch_manager';
 
+  // ======= States =======
+  const [data, setData] = useState({
+    total: 0,
+    byBranch: [],
+    topServices: [],
+    memberships: [],
+    customers: [],
+    pets: [],
+    staff: []
+  });
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedStaff, setSelectedStaff] = useState<any>(null);
+  const [staffSearch, setStaffSearch] = useState('');
+
+  // ======= Guards =======
+  useEffect(() => {
+    if (auth.token && !auth.isExpired && (role === 'staff' || role === 'branch_manager')) return;
     if (!warnedRef.current) {
-      warnedRef.current = true
-      message.info(!auth.token || auth.isExpired ? 'Vui lòng đăng nhập' : 'Không đủ quyền truy cập Company')
+      warnedRef.current = true;
+      message.error('Bạn không có quyền truy cập trang quản trị này');
     }
-    router.replace('/')
-  }, [canAccess, auth.token, auth.isExpired, router])
+    router.replace('/');
+  }, [auth.token, auth.isExpired, router, role]);
 
-  // ======= states =======
-  const [byBranch, setByBranch] = React.useState<Branch[]>([])
-  const [totalData, setTotalData] = React.useState<TotalData>({})
-  const [topServices, setTopServices] = React.useState<Service[]>([])
-  const [memberships, setMemberships] = React.useState<Membership[]>([])
-  const [customers, setCustomers] = React.useState<CustomerBranch[]>([])
-  const [pets, setPets] = React.useState<PetStat[]>([])
-  const [months, setMonths] = React.useState<number>(6)
-
-  const [loadingByBranch, setLoadingByBranch] = React.useState(false)
-  const [loadingTotal, setLoadingTotal] = React.useState(false)
-  const [loadingTopServices, setLoadingTopServices] = React.useState(false)
-  const [loadingMemberships, setLoadingMemberships] = React.useState(false)
-  const [loadingCustomers, setLoadingCustomers] = React.useState(false)
-  const [loadingPets, setLoadingPets] = React.useState(false)
-
-  // ======= loaders =======
-  const loadByBranch = async () => {
-    setLoadingByBranch(true)
+  // ======= Data Loaders =======
+  const fetchData = async (endpoint: string, key: string, params = {}) => {
+    setLoading(prev => ({ ...prev, [key]: true }));
     try {
-      const res = await api.get('/company/revenue/by-branch')
-      const rows = (res.data?.items ?? res.data ?? []) as Branch[]
-      let mapped = rows.map(r => ({ MaCN: r.MaCN, TenCN: r.TenCN ?? r.MaCN, DoanhThu: Number(r.DoanhThu ?? 0) }))
-      // branch_manager: chỉ xem CN của mình (optional)
-      if (role === 'branch_manager' && maCNFromToken) {
-        mapped = mapped.filter(x => x.MaCN === maCNFromToken)
-      }
-      setByBranch(mapped)
-    } catch (err: any) {
-      console.error(err)
-      message.error('Lỗi tải doanh thu theo chi nhánh')
+      const res = await api.get(`/company/${endpoint}`, { params });
+      setData(prev => ({ ...prev, [key]: res.data?.items ?? res.data }));
+    } catch (err) {
+      console.error(err);
     } finally {
-      setLoadingByBranch(false)
+      setLoading(prev => ({ ...prev, [key]: false }));
     }
-  }
+  };
 
-  const loadTotal = async () => {
-    setLoadingTotal(true)
+  const loadAll = () => {
+    fetchData('revenue/total', 'total');
+    fetchData('revenue/by-branch', 'byBranch');
+    fetchData('services/top-revenue', 'topServices');
+    fetchData('memberships/distribution', 'memberships');
+    fetchData('customers/count-by-branch', 'customers');
+    fetchData('pets/overall-stats', 'pets');
+    fetchData('staff/search', 'staff', { keyword: staffSearch });
+    message.success('Dữ liệu đã được cập nhật');
+  };
+
+  useEffect(() => { if (auth.token) loadAll(); }, [staffSearch]);
+
+  const handleUpdateStaff = async (values: any) => {
     try {
-      const res = await api.get('/company/revenue/total')
-      setTotalData(res.data ?? {})
-    } catch (err: any) {
-      console.error(err)
-      message.error('Lỗi tải tổng doanh thu')
-    } finally {
-      setLoadingTotal(false)
+      await api.put(`/company/staff/${selectedStaff.MaNV}/assignment`, values);
+      message.success('Điều động nhân sự thành công');
+      setIsModalOpen(false);
+      fetchData('staff/search', 'staff');
+    } catch (err) {
+      message.error('Lỗi khi cập nhật nhân sự');
     }
-  }
+  };
 
-  const loadTopServices = async (m = months) => {
-    setLoadingTopServices(true)
-    try {
-      const res = await api.get('/company/services/top', { params: { months: m } })
-      const rows = (res.data?.items ?? res.data ?? []) as Service[]
-      setTopServices(rows)
-    } catch (err: any) {
-      console.error(err)
-      message.error('Lỗi tải top dịch vụ')
-    } finally {
-      setLoadingTopServices(false)
-    }
-  }
-
-  const loadMemberships = async () => {
-    setLoadingMemberships(true)
-    try {
-      const res = await api.get('/company/memberships/stats')
-      const rows = (res.data?.items ?? res.data ?? []) as Membership[]
-      setMemberships(rows.map(r => ({ Bac: (r as any).Bac ?? (r as any).name, SoLuong: Number((r as any).SoLuong ?? (r as any).value ?? 0) })))
-    } catch (err: any) {
-      console.error(err)
-      message.error('Lỗi tải thống kê membership')
-    } finally {
-      setLoadingMemberships(false)
-    }
-  }
-
-  const loadCustomers = async () => {
-    setLoadingCustomers(true)
-    try {
-      const res = await api.get('/company/customers/by-branch')
-      const rows = (res.data?.items ?? res.data ?? []) as CustomerBranch[]
-      let mapped = rows.map(r => ({ MaCN: (r as any).MaCN, SoKhach: Number((r as any).SoKhach ?? (r as any).SoKhachHang ?? 0) }))
-      if (role === 'branch_manager' && maCNFromToken) {
-        mapped = mapped.filter(x => (x as any).MaCN === maCNFromToken)
-      }
-      setCustomers(mapped)
-    } catch (err: any) {
-      console.error(err)
-      message.error('Lỗi tải khách hàng theo chi nhánh')
-    } finally {
-      setLoadingCustomers(false)
-    }
-  }
-
-  const loadPets = async () => {
-    setLoadingPets(true)
-    try {
-      const res = await api.get('/company/pets/stats')
-      const rows = (res.data?.items ?? res.data ?? []) as PetStat[]
-      setPets(rows.map(r => ({ Loai: r.Loai, SoLuong: Number(r.SoLuong ?? 0) })))
-    } catch (err: any) {
-      console.error(err)
-      message.error('Lỗi tải thống kê thú cưng')
-    } finally {
-      setLoadingPets(false)
-    }
-  }
-
-  const loadAll = async () => {
-    await Promise.allSettled([
-      loadTotal(),
-      loadByBranch(),
-      loadTopServices(),
-      loadMemberships(),
-      loadCustomers(),
-      loadPets(),
-    ])
-    message.success('Hoàn tất tải dữ liệu')
-  }
-
-  // chỉ load data khi đủ quyền
-  React.useEffect(() => {
-    if (!canAccess) return
-    loadTotal()
-    // bạn có thể gọi loadAll() nếu muốn mở trang là load hết
-    // loadAll()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canAccess])
-
-  const branchChart = byBranch.map(r => ({ branch: r.TenCN ?? r.MaCN ?? 'N/A', revenue: Number(r.DoanhThu ?? 0) }))
-  const membershipData = memberships.map(m => ({ name: m.Bac ?? 'N/A', value: Number(m.SoLuong ?? 0) }))
-
-  // Nếu chưa access thì return UI rỗng (tránh flash dữ liệu)
-  if (!canAccess) return null
-
-  const logout = () => {
-    clearToken()
-    message.success('Đã đăng xuất')
-    router.replace('/')
-  }
+  if (!auth.token) return null;
 
   return (
-    <div style={{ padding: 16 }}>
-      <Space style={{ marginBottom: 12 }} wrap>
-        <Tag color="blue">{role}</Tag>
-
-        {maCNFromToken && (
-          <Tag color="purple">MaCN: {maCNFromToken}</Tag>
-        )}
-
-        <Button onClick={() => router.push('/')}>
-          Về Home
-        </Button>
-
-        <Button danger onClick={logout}>
-          Logout
-        </Button>
-      </Space>
-
-      <Row gutter={[16, 16]}>
-        <Col xs={24} md={8}>
-          <Card
-            title="Tổng doanh thu"
-            extra={
+    <ConfigProvider theme={{ algorithm: isDarkMode ? darkAlgorithm : defaultAlgorithm }}>
+      <div style={{ 
+        padding: '24px', 
+        background: isDarkMode ? '#141414' : '#f0f2f5', 
+        minHeight: '100vh',
+        transition: 'all 0.3s'
+      }}>
+        {/* Header Section */}
+        <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
+          <Col>
+            <Title level={2} style={{ margin: 0 }}>PetCareX Dashboard</Title>
+            <Space split={<Text type="secondary">|</Text>}>
+              <Tag color="gold" icon={<TeamOutlined />}>{role?.toUpperCase()}</Tag>
+              {maCNFromToken && <Text type="secondary">Chi nhánh: {maCNFromToken}</Text>}
+            </Space>
+          </Col>
+          <Col>
+            <Space size="large">
               <Space>
-                <Button onClick={loadTotal} loading={loadingTotal}>Làm mới</Button>
-                <Button onClick={loadAll}>Làm mới tất cả</Button>
+                <BulbOutlined />
+                <Switch 
+                  checked={isDarkMode} 
+                  onChange={setIsDarkMode} 
+                  checkedChildren="Dark" 
+                  unCheckedChildren="Light" 
+                />
+                <BulbFilled />
               </Space>
-            }
-          >
-            <div style={{ fontSize: 24, fontWeight: 700 }}>
-              {Number((totalData as any)?.TongDoanhThu ?? (totalData as any)?.total ?? (totalData as any)?.value ?? 0).toLocaleString('vi-VN')} VND
-            </div>
-            {role === 'branch_manager' ? (
-              <Typography.Text type="secondary">
-                *Lưu ý: Bạn đang xem dữ liệu theo chi nhánh của mình (lọc ở các bảng theo CN).
-              </Typography.Text>
-            ) : null}
-          </Card>
-        </Col>
+              <Button icon={<ReloadOutlined />} onClick={loadAll}>Refresh</Button>
+              <Button danger onClick={() => { clearToken(); router.replace('/'); }}>Logout</Button>
+            </Space>
+          </Col>
+        </Row>
 
-        <Col xs={24} md={16}>
-          <Card title="Top dịch vụ">
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div />
-              <div>
-                <InputNumber min={1} max={36} value={months} onChange={(v) => setMonths(Number(v ?? 6))} />
-                <Button style={{ marginLeft: 8 }} onClick={() => loadTopServices(months)} loading={loadingTopServices}>
-                  Áp dụng
-                </Button>
-              </div>
-            </div>
+        <Row gutter={[16, 16]}>
+          {/* CT2: Tổng doanh thu */}
+          <Col xs={24} md={8}>
+            <Card hoverable style={{ height: '100%' }}>
+              <Statistic 
+                title={<Text strong>TỔNG DOANH THU HỆ THỐNG</Text>}
+                value={(data.total as any)?.TongDoanhThu || 0}
+                precision={0}
+                prefix={<DollarOutlined style={{ color: '#52c41a' }} />}
+                suffix="VND"
+                valueStyle={{ color: '#52c41a', fontWeight: 'bold' }}
+              />
+              <Text type="secondary">Cập nhật: {new Date().toLocaleTimeString()}</Text>
+            </Card>
+          </Col>
 
-            <Table<Service>
-              dataSource={topServices}
-              rowKey={(r) => r.MaDV ?? r.TenDV ?? JSON.stringify(r)}
-              pagination={{ pageSize: 6 }}
-              columns={[
-                { title: 'Mã', dataIndex: 'MaDV' },
-                { title: 'Tên dịch vụ', dataIndex: 'TenDV' },
-                { title: 'Số lần', dataIndex: 'SoLan', align: 'right' },
-                { title: 'Doanh thu', dataIndex: 'DoanhThu', align: 'right', render: (v) => Number(v ?? 0).toLocaleString('vi-VN') },
-              ]}
-            />
-          </Card>
-        </Col>
+          {/* CT4: Hội viên */}
+          <Col xs={24} md={16}>
+            <Card title={<Space><PieChartOutlined /> Phân bổ hạng hội viên (CT4)</Space>} hoverable>
+              <MembershipPie data={data.memberships.map((m: any) => ({ name: m.Bac, value: m.SoLuong }))} />
+            </Card>
+          </Col>
 
-        <Col xs={24} md={12}>
-          <Card title="Doanh thu theo chi nhánh" extra={<Button onClick={loadByBranch} loading={loadingByBranch}>Làm mới</Button>}>
-            <Table<Branch>
-              dataSource={byBranch}
-              rowKey={(r) => r.MaCN ?? r.TenCN ?? JSON.stringify(r)}
-              pagination={{ pageSize: 6 }}
-              columns={[
-                { title: 'Mã CN', dataIndex: 'MaCN' },
-                { title: 'Tên CN', dataIndex: 'TenCN' },
-                { title: 'Doanh thu', dataIndex: 'DoanhThu', align: 'right', render: (v) => Number(v ?? 0).toLocaleString('vi-VN') }
-              ]}
-            />
-          </Card>
-        </Col>
+          {/* CT1: Doanh thu chi nhánh */}
+          <Col xs={24} lg={12}>
+            <Card title={<Space><BarChartOutlined /> Doanh thu theo chi nhánh (CT1)</Space>} hoverable>
+              <BranchBar data={data.byBranch.map((b: any) => ({ branch: b.TenCN, revenue: b.DoanhThu }))} />
+            </Card>
+          </Col>
 
-        <Col xs={24} md={12}>
-          <Card title="Biểu đồ Doanh thu theo CN">
-            <BranchBar data={branchChart} />
-          </Card>
-        </Col>
+          {/* CT3: Top Dịch vụ */}
+          <Col xs={24} lg={12}>
+            <Card title={<Space><DollarOutlined /> Dịch vụ mang lại doanh thu cao nhất (CT3)</Space>} hoverable>
+              <Table 
+                dataSource={data.topServices} 
+                rowKey="MaDV"
+                columns={[
+                  { title: 'Dịch vụ', dataIndex: 'TenDV', key: 'TenDV', render: (t) => <Text strong>{t}</Text> },
+                  { title: 'Doanh thu (VND)', dataIndex: 'DoanhThuDichVu', key: 'rev', align: 'right', render: v => <Text color="blue">{v?.toLocaleString()}</Text> }
+                ]} 
+                pagination={false} 
+                size="small"
+              />
+            </Card>
+          </Col>
 
-        <Col xs={24} md={12}>
-          <Card title="Thống kê gói membership" extra={<Button onClick={loadMemberships} loading={loadingMemberships}>Làm mới</Button>}>
-            <MembershipPie data={membershipData} />
-          </Card>
-        </Col>
+          {/* CT5 & CT6: Nhân sự */}
+<Col span={24}>
+  <Card 
+    title={<Space><UserOutlined /> Quản lý & Điều động nhân sự (CT5, CT6)</Space>}
+    extra={<Input.Search placeholder="Tìm nhân viên..." onSearch={setStaffSearch} style={{ width: 250 }} />}
+    hoverable
+  >
+    <Table 
+      dataSource={data.staff}
+      rowKey="MaNV"
+      columns={[
+        { 
+          title: 'Mã NV', 
+          dataIndex: 'MaNV',
+          sorter: (a: any, b: any) => a.MaNV.localeCompare(b.MaNV) 
+        },
+        { 
+          title: 'Họ tên', 
+          dataIndex: 'HoTen', 
+          render: (t) => <Text strong>{t}</Text>,
+          sorter: (a: any, b: any) => a.HoTen.localeCompare(b.HoTen)
+        },
+        { title: 'Chức vụ', dataIndex: 'ChucVu' },
+        { 
+          title: 'Chi nhánh', 
+          dataIndex: 'TenCN', 
+          render: (t) => <Tag color="blue">{t}</Tag>,
+      
+        },
+        { 
+          title: 'Lương', 
+          dataIndex: 'Luong', 
+          // Sắp xếp theo giá trị số của lương
+          sorter: (a: any, b: any) => a.Luong - b.Luong,
+          render: v => <Text strong color="green">{v?.toLocaleString()} đ</Text> 
+        },
+        { 
+          title: 'Thao tác', 
+          render: (_, record) => (
+            <Button type="primary" ghost icon={<SwapOutlined />} onClick={() => { setSelectedStaff(record); setIsModalOpen(true); }}>
+              Điều động
+            </Button>
+          ) 
+        }
+      ]}
+      // Thêm tooltip hướng dẫn sắp xếp cho người dùng
+      showSorterTooltip={{ title: 'Click để sắp xếp' }}
+    />
+  </Card>
+</Col>
 
-        <Col xs={24} md={12}>
-          <Card title="Thống kê thú cưng" extra={<Button onClick={loadPets} loading={loadingPets}>Làm mới</Button>}>
-            <Table<PetStat>
-              dataSource={pets}
-              rowKey={(r) => r.Loai ?? JSON.stringify(r)}
-              pagination={{ pageSize: 6 }}
-              columns={[
-                { title: 'Loại', dataIndex: 'Loai' },
-                { title: 'Số lượng', dataIndex: 'SoLuong', align: 'right' }
-              ]}
-            />
-          </Card>
-        </Col>
+          {/* CT7: Khách hàng chi nhánh */}
+         <Col xs={24} md={12}>
+  <Card title={<Space><TeamOutlined /> Khách hàng mỗi chi nhánh (CT7)</Space>} hoverable>
+    <Table 
+      dataSource={data.customers} 
+      rowKey="TenCN"
+      columns={[
+        { 
+          title: 'Chi nhánh', 
+          dataIndex: 'TenCN',
+          
+        },
+        { 
+          title: 'Số lượng khách', 
+          dataIndex: 'SoKhachHang', 
+          align: 'right', 
+          // Sắp xếp theo số lượng tăng/giảm dần
+          sorter: (a: any, b: any) => a.SoKhachHang - b.SoKhachHang,
+          // Mặc định ưu tiên sắp xếp cột này giảm dần khi click lần đầu
+          defaultSortOrder: 'descend', 
+          render: v => <Text strong style={{ color: '#1890ff' }}>{v}</Text> 
+        }
+      ]}
+      size="small"
+      pagination={{ pageSize: 5 }}
+      // Làm cho bảng nhìn chuyên nghiệp hơn khi di chuột qua
+      showSorterTooltip={{ title: 'Sort' }}
+    />
+  </Card>
+</Col>
 
-        <Col xs={24}>
-          <Card title="Khách hàng theo chi nhánh" extra={<Button onClick={loadCustomers} loading={loadingCustomers}>Làm mới</Button>}>
-            <Table<CustomerBranch>
-              dataSource={customers}
-              rowKey={(r) => (r as any).MaCN ?? (r as any).TenCN ?? JSON.stringify(r)}
-              pagination={{ pageSize: 8 }}
-              columns={[
-                { title: 'Mã CN', dataIndex: 'MaCN' },
-                { title: 'Tên CN', dataIndex: 'TenCN' },
-                { title: 'Số KH', dataIndex: 'SoKhach', align: 'right', render: (v, r) => Number(v ?? (r as any).SoKhachHang ?? 0).toLocaleString('vi-VN') }
-              ]}
-            />
-          </Card>
-        </Col>
-      </Row>
+          {/* CT8: Thú cưng */}
+          <Col xs={24} md={12}>
+            <Card title="Thống kê loài thú cưng (CT8)">
+              <Table 
+                dataSource={data.pets.filter(item => item.Loai !== 'TỔNG CỘNG')} 
+                columns={[
+                  { title: 'Loài', dataIndex: 'Loai', render: v => <Tag color="purple">{v}</Tag> },
+                  { title: 'Số lượng', dataIndex: 'SoLuong', align: 'right' }
+                ]}
+                size="small"
+                pagination={false}
+                summary={() => {
+                  const total = data.pets.find(i => i.Loai === 'TỔNG CỘNG')?.SoLuong || 0;
+                  return (
+                    <Table.Summary.Row style={{ background: isDarkMode ? '#1d1d1d' : '#fafafa' }}>
+                      <Table.Summary.Cell index={0}><Text strong>TỔNG CỘNG</Text></Table.Summary.Cell>
+                      <Table.Summary.Cell index={1} align="right"><Text strong type="danger">{total}</Text></Table.Summary.Cell>
+                    </Table.Summary.Row>
+                  );
+                }}
+              />
+            </Card>
+          </Col>
+        </Row>
 
-      <div style={{ marginTop: 16 }}>
-        <h4>Raw debug (quick):</h4>
-        <pre style={{ maxHeight: 240, overflow: 'auto', background: '#fff', padding: 12 }}>
-          {JSON.stringify({ totalData, byBranch, topServices, memberships, customers, pets }, null, 2)}
-        </pre>
+        {/* Modal CT6 */}
+        <Modal 
+          title={`Điều động nhân sự: ${selectedStaff?.HoTen}`} 
+          open={isModalOpen} 
+          onCancel={() => setIsModalOpen(false)}
+          footer={null}
+          destroyOnClose
+        >
+          <Form layout="vertical" onFinish={handleUpdateStaff} initialValues={{ luong_moi: selectedStaff?.Luong }}>
+            <Form.Item name="ma_cn_moi" label="Chi nhánh mới" rules={[{ required: true, message: 'Vui lòng nhập mã CN' }]}>
+              <Input placeholder="Ví dụ: CN002" />
+            </Form.Item>
+            <Form.Item name="luong_moi" label="Mức lương mới" rules={[{ required: true }]}>
+              <InputNumber style={{ width: '100%' }} formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" block size="large">Xác nhận điều động</Button>
+          </Form>
+        </Modal>
       </div>
-    </div>
-  )
+    </ConfigProvider>
+  );
 }

@@ -184,7 +184,7 @@ INSERT INTO PHIENDICHVU (MaHoaDon, MaThuCung, MaDV, GiaTien, MaCN, TrangThai)
 SELECT 
     t.MaHD,
     (SELECT TOP 1 MaThuCung FROM THUCUNG WHERE MaKH = h.MaKH), -- Lấy đúng thú cưng của khách đó
-    'DV001', 150000, 'CN001', 'BOOKING'
+    'DV001', 150000, 'CN001', 'CONFIRMED'
 FROM @NewInvoices t
 JOIN HOADON h ON t.MaHD = h.MaHoaDon
 WHERE t.ID <= 10;
