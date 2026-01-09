@@ -49,8 +49,6 @@ def login(username: str, password: str, db: Session = Depends(get_db)):
 @router.post("/staff-login")
 def staff_login(ma_nv: str, password: str, db: Session = Depends(get_db)):
     """
-    Minimal staff login stub.
-    Khuyến nghị: tạo bảng TAIKHOAN_NHANVIEN sau.
     Tạm thời: password == 'admin' cho demo, và role dựa theo ChucVu.
     """
     nv = db.execute(
@@ -76,3 +74,56 @@ def staff_login(ma_nv: str, password: str, db: Session = Depends(get_db)):
         expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
     )
     return {"access_token": token, "token_type": "bearer"}
+
+
+@router.post("/register")
+def customer_register(
+    username: str, 
+    password: str, 
+    Hoten: str, 
+    CCCD: str, 
+    Gioitinh: str, 
+    Email: str, 
+    SDT: str, 
+    db: Session = Depends(get_db)
+):
+    try:
+        # 1. Chèn khách hàng và lấy MaKH vừa sinh ra bằng OUTPUT
+        sql_kh = text("""
+            INSERT INTO KHACHHANG (Hoten, CCCD, Gioitinh, Email, SDT)
+            OUTPUT inserted.MaKH
+            VALUES (:hoten, :cccd, :gioitinh, :email, :sdt)
+        """)
+        
+        result = db.execute(sql_kh, {
+            "hoten": Hoten,
+            "cccd": CCCD,
+            "gioitinh": Gioitinh,
+            "email": Email,
+            "sdt": SDT
+        })
+        
+        # Lấy giá trị MaKH từ kết quả trả về
+        row = result.fetchone()
+        if not row:
+            raise Exception("Không thể tạo MaKH")
+        new_ma_kh = row[0]
+
+        # 2. Chèn vào bảng tài khoản mật khẩu
+        sql_tk = text("""
+            INSERT INTO TAIKHOAN_MATKHAU (MaKH, Tendangnhap, Matkhau)
+            VALUES (:ma_kh, :username, :password)
+        """)
+        
+        db.execute(sql_tk, {
+            "ma_kh": new_ma_kh,
+            "username": username,
+            "password": password
+        })
+
+        db.commit()
+        return {"status": "success", "ma_kh": new_ma_kh}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
