@@ -312,10 +312,19 @@ def kh12_invoice_detail(db: Session, ma_hoa_don: str, ma_kh: str):
     return {"header": header, "items": items}
 
 
-def kh13_list_services(db: Session):
-    return db.execute(
-        text("SELECT MaDV, TenDV FROM DICHVU")
+def kh13_list_services(db: Session, ma_cn: Optional[str] = None):
+    # Nếu ma_cn có giá trị, lọc các dịch vụ mà chi nhánh đó cung cấp
+    # Nếu ma_cn là None, lấy tất cả dịch vụ trong bảng DICHVU
+    rows = db.execute(
+        text("""
+            SELECT MaDV, TenDV, DonGia
+            FROM DICHVU
+            WHERE :cn IS NULL 
+               OR MaDV IN (SELECT MaDV FROM CUNGCAPDICHVU WHERE MaCN = :cn)
+        """),
+        {"cn": ma_cn}
     ).mappings().all()
+    return rows
 
 
 def kh14_my_appointments(db: Session, ma_kh: str):
@@ -590,15 +599,24 @@ def kh17_my_bookings(db: Session, ma_kh: str):
         {"kh": ma_kh},
     ).mappings().all()
 
-def kh8_search_products(db: Session, keyword: str | None, loai: str | None):
+def kh8_search_products(db: Session, keyword: str | None, loai: str | None, ma_cn: str | None = None):
+    # Nếu có ma_cn, ta lấy thêm cột SoLuongTonKho từ bảng CHINHANH_SANPHAM
+    # Nếu không có ma_cn, hiển thị tồn kho là 0 hoặc không hiển thị
     rows = db.execute(
         text("""
-            SELECT MaSP, TenSP, LoaiSP, DonGia
-            FROM SANPHAM
-            WHERE (:kw IS NULL OR TenSP LIKE N'%' + :kw + N'%')
-              AND (:loai IS NULL OR LoaiSP = :loai)
+            SELECT 
+                sp.MaSP, 
+                sp.TenSP, 
+                sp.LoaiSP, 
+                sp.DonGia,
+                ISNULL(csp.SoLuongTonKho, '-') AS SoLuongTonKho
+            FROM SANPHAM sp
+            LEFT JOIN CHINHANH_SANPHAM csp ON sp.MaSP = csp.MaSP AND csp.MaCN = :cn
+            WHERE (:kw IS NULL OR sp.TenSP LIKE N'%' + :kw + N'%')
+              AND (:loai IS NULL OR sp.LoaiSP = :loai)
+              AND (:cn IS NULL OR csp.MaCN = :cn) -- Chỉ hiện sản phẩm chi nhánh có bán nếu truyền ma_cn
         """),
-        {"kw": keyword, "loai": loai},
+        {"kw": keyword, "loai": loai, "cn": ma_cn},
     ).mappings().all()
     return rows
 

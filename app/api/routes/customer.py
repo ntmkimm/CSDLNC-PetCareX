@@ -54,10 +54,11 @@ def pet_medical_history(ma_thu_cung: str, ma_kh: str, db: Session = Depends(get_
 def search_products(
     keyword: str | None = None,
     loai: str | None = None,
+    ma_cn: str | None = None, # Thêm tham số ma_cn ở đây
     db: Session = Depends(get_db),
 ):
     return {
-        "items": customer_service.kh8_search_products(db, keyword, loai)
+        "items": customer_service.kh8_search_products(db, keyword, loai, ma_cn)
     }
     
 @router.post("/orders/products")
@@ -76,8 +77,11 @@ def cancel_booking(ma_phien: str, ma_kh: str, db: Session = Depends(get_db)):
 
 
 @router.get("/services")
-def list_services(db: Session = Depends(get_db)):
-    return {"items": customer_service.kh13_list_services(db)}
+def list_services(
+    ma_cn: str | None = None, # Thêm tham số lọc theo chi nhánh
+    db: Session = Depends(get_db)
+):
+    return {"items": customer_service.kh13_list_services(db, ma_cn)}
 
 @router.get("/me/appointments")
 def my_appointments(ma_kh: str, db: Session = Depends(get_db)):
