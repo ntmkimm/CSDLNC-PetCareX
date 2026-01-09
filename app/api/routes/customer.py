@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.services import customer_service
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
@@ -142,3 +143,25 @@ def get_branch_by_product(ma_sp: str, db: Session = Depends(get_db)):
     return {
         "items": customer_service.kh_get_chinhanh_by_product(db, ma_sp)
     }
+    
+
+# Schema để nhận dữ liệu từ frontend
+class ReviewCreate(BaseModel):
+    diem_dv: int = Field(..., ge=1, le=10)
+    muc_do: int = Field(..., ge=1, le=5)
+    thai_do: str | None = None
+    binh_luan: str | None = None
+
+@router.post("/invoices/{ma_hoa_don}/review")
+def create_review(
+    ma_hoa_don: str, 
+    ma_kh: str, 
+    data: ReviewCreate, 
+    db: Session = Depends(get_db)
+):
+    return customer_service.kh_create_review(db, ma_kh, ma_hoa_don, data.dict())
+
+@router.get("/invoices/{ma_hoa_don}/review")
+def get_review(ma_hoa_don: str, ma_kh: str, db: Session = Depends(get_db)):
+    review = customer_service.kh_get_review(db, ma_kh, ma_hoa_don)
+    return {"review": review}

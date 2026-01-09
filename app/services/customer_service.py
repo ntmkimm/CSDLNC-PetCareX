@@ -242,17 +242,22 @@ def kh10_pet_medical_history(db: Session, ma_thu_cung: str, ma_kh: str):
 # KH11 - Danh sách hóa đơn đã thanh toán
 # ============================================================
 def kh11_purchase_history(db: Session, ma_kh: str):
-    # Trả về danh sách hóa đơn tổng quát
-    rows = db.execute(
-        text("""
-            SELECT MaHoaDon, NgayLap, TongTien, KhuyenMai, HinhThucThanhToan
-            FROM HOADON
-            WHERE MaKH = :kh AND HinhThucThanhToan IS NOT NULL
-            ORDER BY NgayLap DESC
-        """),
-        {"kh": ma_kh},
-    ).mappings().all()
-    return rows
+    query = text("""
+        SELECT 
+            HD.MaHoaDon, 
+            HD.NgayLap, 
+            HD.TongTien, 
+            HD.HinhThucThanhToan,
+            CASE WHEN NX.MaHoaDon IS NOT NULL THEN 1 ELSE 0 END AS DaDanhGia
+        FROM HOADON HD
+        LEFT JOIN NHANXET NX ON HD.MaHoaDon = NX.MaHoaDon AND HD.MaKH = NX.MaKH
+        WHERE HD.MaKH = :ma_kh -- Tên tham số ở đây là ma_kh
+    """)
+    
+    # Ở đây phải dùng key là "ma_kh" cho khớp với :ma_kh ở trên
+    result = db.execute(query, {"ma_kh": ma_kh}).mappings().all() 
+    return result
+
 
 
 # ============================================================
@@ -874,3 +879,27 @@ def kh_confirm_invoice(
     except DBAPIError as e:
         raise HTTPException(status_code=400, detail=str(e.orig))
     
+def kh_create_review(db: Session, ma_kh: str, ma_hoa_don: str, data: dict):
+    # Kiểm tra hóa đơn có tồn tại và thuộc về khách hàng không
+    # (Optional: Check if invoice status is paid)
+    
+    query = text("""
+        INSERT INTO NHANXET (MaKH, MaHoaDon, DiemDV, Mucdohailong, Thaidonhanvien, Binhluan)
+        VALUES (:ma_kh, :ma_hd, :diem_dv, :muc_do, :thai_do, :binh_luan)
+    """)
+    
+    db.execute(query, {
+        "ma_kh": ma_kh,
+        "ma_hd": ma_hoa_don,
+        "diem_dv": data.get("diem_dv"),
+        "muc_do": data.get("muc_do"),
+        "thai_do": data.get("thai_do"),
+        "binh_luan": data.get("binh_luan")
+    })
+    db.commit()
+    return {"status": "success", "message": "Cảm ơn bạn đã đánh giá!"}
+
+def kh_get_review(db: Session, ma_kh: str, ma_hoa_don: str):
+    query = text("SELECT * FROM NHANXET WHERE MaKH = :ma_kh AND MaHoaDon = :ma_hd")
+    result = db.execute(query, {"ma_kh": ma_kh, "ma_hd": ma_hoa_don}).mappings().first()
+    return result
