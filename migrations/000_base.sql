@@ -136,6 +136,7 @@ CREATE TABLE PHIENDICHVU (
             N'BOOKING',      -- đặt lịch / giỏ hàng
             N'IN_SERVICE',   -- đang khám / đang làm
             N'CONFIRMED',    -- đã thanh toán
+            N'DONE_SERVICE',
             N'CANCELLED'
         )),
 
@@ -152,16 +153,18 @@ CREATE TABLE KHAMBENH (
 
 CREATE TABLE TOATHUOC (
     MaPhien VARCHAR(10) REFERENCES PHIENDICHVU(MaPhien),
+    -- MaKhamBenh VARCHAR(10) REFERENCES PHIENDICHVU(MaPhien),
     MaThuoc VARCHAR(10) REFERENCES SANPHAM(MaSP),
     Soluong INT CHECK (Soluong > 0), PRIMARY KEY (MaPhien, MaThuoc)
 );
 
 CREATE TABLE TIEMPHONG (
-    MaPhien VARCHAR(10) PRIMARY KEY REFERENCES PHIENDICHVU(MaPhien),
+    MaPhien VARCHAR(10) REFERENCES PHIENDICHVU(MaPhien),
     MaVC VARCHAR(10) REFERENCES VACCINE(MaVC),
     MaGoi VARCHAR(10) REFERENCES GOITIEMPHONG(MaGoi),
     BacSiPhuTrach VARCHAR(10) REFERENCES NHANVIEN(MaNV),
-    NgayTiem DATE NOT NULL, SoLieu FLOAT CHECK (SoLieu > 0)
+    NgayTiem DATE NOT NULL, SoLieu FLOAT CHECK (SoLieu > 0),
+    PRIMARY KEY (MaPhien, MaVC)
 );
 
 CREATE TABLE MUAHANG (

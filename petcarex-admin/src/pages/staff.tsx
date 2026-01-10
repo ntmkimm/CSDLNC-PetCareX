@@ -30,7 +30,7 @@ export default function StaffEntryPage() {
       router.replace({ pathname: '/staff/reception', query })
     } 
     else if (role === 'veterinarian_staff') {
-      router.replace({ pathname: '/staff/vet', query })
+      router.replace({ pathname: '/staff/veterinarian', query })
     } 
     else if (role === 'branch_manager') {
       // Manager có quyền vào tất cả, nhưng mặc định đẩy vào sales

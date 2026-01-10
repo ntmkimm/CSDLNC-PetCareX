@@ -293,3 +293,204 @@ def nv6_invoice_detail(db: Session, ma_hoa_don: str):
         "tiem_phong": tiem,
         "ke_thuoc": thuoc,
     }
+
+def get_exam_history_by_pet(db: Session, ma_thu_cung: str):
+    sql = """
+        SELECT 
+            CAST(p.ThoiDiemKetThuc AS DATE) as NgayKham, 
+            kb.ChanDoan, 
+            nv.HoTen as TenBacSi,
+            -- Gộp tên thuốc và số lượng thành một chuỗi
+            (SELECT STRING_AGG(sp.TenSP + ' (x' + CAST(tt.SoLuong AS VARCHAR) + ')', ', ')
+             FROM TOATHUOC tt
+             JOIN SANPHAM sp ON tt.MaThuoc = sp.MaSP
+             WHERE tt.MaPhien = p.MaPhien) as ToaThuoc
+        FROM KHAMBENH kb
+        JOIN PHIENDICHVU p ON kb.MaPhien = p.MaPhien
+        JOIN NHANVIEN nv ON kb.BacSiPhuTrach = nv.MaNV
+        WHERE p.MaThuCung = :ma_pet 
+        ORDER BY p.ThoiDiemKetThuc DESC
+    """
+    result = db.execute(text(sql), {"ma_pet": ma_thu_cung})
+    return [dict(row) for row in result.mappings()]
+
+def get_vaccine_history_by_pet(db: Session, ma_thu_cung: str):
+    sql = """
+        SELECT 
+            tp.NgayTiem, 
+            vc.TenVC as TenVaccine, 
+            tp.SoLieu,               -- Khớp với React
+            nv.HoTen as TenBacSi,    -- Lấy tên từ bảng NHANVIEN
+            tp.MaGoi                 -- Nếu không biết tên bảng gói, cứ lấy cái Mã ra trước
+        FROM TIEMPHONG tp
+        JOIN VACCINE vc ON tp.MaVC = vc.MaVC
+        LEFT JOIN NHANVIEN nv ON tp.BacSiPhuTrach = nv.MaNV
+        JOIN PHIENDICHVU pd ON tp.MaPhien = pd.MaPhien
+        WHERE pd.MaThuCung = :ma_pet 
+        ORDER BY tp.NgayTiem DESC
+    """
+    result = db.execute(text(sql), {"ma_pet": ma_thu_cung})
+    return [dict(row) for row in result.mappings()]
+
+def get_bookings_by_customer(db: Session, ma_cn: str, ma_kh: str = None, ma_dv: str = 'DV001'):
+    """
+    Lấy danh sách chờ dựa trên mã dịch vụ (DV001: Khám, DV002: Tiêm)
+    """
+    sql = """
+        SELECT 
+            p.MaPhien, t.MaKH, p.TrangThai, t.Ten as TenThuCung, 
+            p.MaDV, p.MaThuCung
+        FROM PHIENDICHVU p
+        INNER JOIN THUCUNG t ON p.MaThuCung = t.MaThuCung
+        WHERE p.MaCN = :ma_cn 
+          AND p.TrangThai = N'IN_SERVICE'  
+          AND p.MaDV = :ma_dv 
+    """
+    params = {"ma_cn": ma_cn, "ma_dv": ma_dv}
+    if ma_kh:
+        sql += " AND t.MaKH = :ma_kh"
+        params["ma_kh"] = ma_kh
+
+    result = db.execute(text(sql), params).mappings().all()
+    return [dict(row) for row in result]
+
+def complete_exam_process(db: Session, ma_phien: str, ma_bs: str, trieu_chung: str, chan_doan: str, thuoc_list: list):
+    try:
+        db.execute(text("""
+            IF EXISTS (SELECT 1 FROM KHAMBENH WHERE MaPhien = :mp)
+                UPDATE KHAMBENH SET BacSiPhuTrach=:bs, CacTrieuChung=:tc, ChanDoan=:cd WHERE MaPhien=:mp
+            ELSE
+                INSERT INTO KHAMBENH (MaPhien, BacSiPhuTrach, CacTrieuChung, ChanDoan)
+                VALUES (:mp, :bs, :tc, :cd)
+        """), {"mp": ma_phien, "bs": ma_bs, "tc": trieu_chung, "cd": chan_doan})
+
+        if thuoc_list:
+            db.execute(text("DELETE FROM TOATHUOC WHERE MaPhien = :mp"), {"mp": ma_phien})
+            
+            for item in thuoc_list:
+                db.execute(text("""
+                    INSERT INTO TOATHUOC (MaPhien, MaThuoc, Soluong) 
+                    VALUES (:mp, :mt, :sl)
+                """), {
+                    "mp": ma_phien, 
+                    "mt": item['MaSP'], 
+                    "sl": item['SoLuong']
+                })
+
+        db.execute(text("""
+            UPDATE PHIENDICHVU 
+            SET ThoiDiemKetThuc = GETDATE() 
+            WHERE MaPhien = :mp
+        """), {"mp": ma_phien})
+
+        db.commit()
+        return {"ok": True, "message": "Đã lưu bệnh án và đơn thuốc thành công"}
+
+    except Exception as e:
+        db.rollback()
+        print(f"Lỗi tại complete_exam_process: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Không thể lưu: {str(e)}")
+    
+def complete_vaccine_process(db: Session, ma_phien: str, ma_bs: str, danh_sach_tiem: list):
+    try:
+        db.execute(text("""
+            UPDATE PHIENDICHVU 
+            SET TrangThai = N'DONE_SERVICE', 
+                ThoiDiemKetThuc = GETDATE()
+            WHERE MaPhien = :mp
+        """), {"mp": ma_phien})
+
+        for item in danh_sach_tiem:
+            db.execute(text("""
+                INSERT INTO TIEMPHONG (MaPhien, MaVC, MaGoi, BacSiPhuTrach, NgayTiem, SoLieu)
+                VALUES (:mp, :mvc, :mgoi, :bs, CAST(GETDATE() AS DATE), :sl)
+            """), {
+                "mp": ma_phien, 
+                "mvc": item['ma_vc'],
+                "mgoi": item.get('ma_goi'), 
+                "bs": ma_bs,
+                "sl": item['so_lieu']
+            })
+
+        db.commit()
+        return {"ok": True, "message": "Đã lưu lịch sử tiêm phòng"}
+    except Exception as e:
+        db.rollback()
+        raise Exception(f"Lỗi tại Service: {str(e)}")
+    
+def get_all_medicines(db: Session):
+    try:
+        query = text("""
+            SELECT MaSP, TenSP, CAST(DonGia AS FLOAT) as DonGia
+            FROM SANPHAM 
+            WHERE LoaiSP = N'Thuốc'
+        """)
+        result = db.execute(query)
+        data = [dict(row) for row in result.mappings()]
+        print(f"DEBUG: Đã tải {len(data)} loại thuốc từ SANPHAM")
+        return data
+    except Exception as e:
+        print(f"Lỗi SQL tại get_all_medicines: {e}")
+        return []
+
+def start_examination(db: Session, ma_phien: str):
+    try:
+        phien = db.execute(
+            text("SELECT TrangThai FROM PHIENDICHVU WHERE MaPhien = :mp"), 
+            {"mp": ma_phien}
+        ).fetchone()
+
+        if not phien:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phiên")
+        
+        if phien.TrangThai != 'IN_SERVICE':
+            raise HTTPException(status_code=400, detail="Ca này đã có bác sĩ khác nhận hoặc đã hoàn thành")
+
+        db.execute(text("""
+            UPDATE PHIENDICHVU 
+            SET TrangThai = N'DONE_SERVICE', 
+                ThoiDiemBatDau = GETDATE() 
+            WHERE MaPhien = :mp
+        """), {"mp": ma_phien})
+        
+        db.commit()
+        return {"ok": True}
+    except Exception as e:
+        db.rollback()
+        raise e
+    
+def get_daily_history_all(db: Session, ma_cn: str, selected_date: str):
+    try:
+        query_kham = text("""
+            SELECT 
+                kb.MaPhien, tc.Ten AS TenThuCung, 
+                tc.Loai, tc.Giong, tc.NgaySinh, tc.GioiTinh, -- Thêm thông tin thú cưng
+                kb.ChanDoan, kb.CacTrieuChung AS TrieuChung, pd.ThoiDiemKetThuc,
+                (SELECT STRING_AGG(sp.TenSP, ', ') FROM TOATHUOC tt 
+                 JOIN SANPHAM sp ON tt.MaThuoc = sp.MaSP WHERE tt.MaPhien = kb.MaPhien) AS ThuocDaKe
+            FROM KHAMBENH kb
+            JOIN PHIENDICHVU pd ON kb.MaPhien = pd.MaPhien
+            JOIN THUCUNG tc ON pd.MaThuCung = tc.MaThuCung
+            WHERE pd.MaCN = :cn AND CAST(pd.ThoiDiemKetThuc AS DATE) = :dt
+            ORDER BY pd.ThoiDiemKetThuc DESC
+        """)
+
+        query_tiem = text("""
+            SELECT 
+                tp.MaPhien, tc.Ten AS TenThuCung, 
+                tc.Loai, tc.Giong, tc.NgaySinh, tc.GioiTinh, -- Thêm thông tin thú cưng
+                vc.TenVC, tp.SoLieu, pd.ThoiDiemKetThuc
+            FROM TIEMPHONG tp
+            JOIN VACCINE vc ON tp.MaVC = vc.MaVC
+            JOIN PHIENDICHVU pd ON tp.MaPhien = pd.MaPhien
+            JOIN THUCUNG tc ON pd.MaThuCung = tc.MaThuCung
+            WHERE pd.MaCN = :cn AND tp.NgayTiem = :dt
+            ORDER BY pd.ThoiDiemKetThuc DESC
+        """)
+
+        res_kham = db.execute(query_kham, {"cn": ma_cn, "dt": selected_date}).mappings().all()
+        res_tiem = db.execute(query_tiem, {"cn": ma_cn, "dt": selected_date}).mappings().all()
+
+        return {"kham_list": res_kham, "tiem_list": res_tiem}
+    except Exception as e:
+        raise e

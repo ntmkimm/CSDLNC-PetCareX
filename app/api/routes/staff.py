@@ -42,3 +42,71 @@ def inventory(ma_cn: str, db: Session = Depends(get_db)):
 @router.post("/inventory/products/import")  # NV8
 def import_product_stock(ma_cn: str, ma_sp: str, so_luong: int, db: Session = Depends(get_db)):
     return staff_service.nv8_import_product_stock(db, ma_cn, ma_sp, so_luong)
+
+@router.get("/medicines")
+def list_medicines(ma_cn: str, db: Session = Depends(get_db)):
+    res = staff_service.nv7_inventory(db, ma_cn)
+    return {"items": [p for p in res["products"] if p["LoaiSP"] == "Thuốc"]}
+
+@router.get("/history/exams")
+def get_pet_exam_history(ma_thu_cung: str, db: Session = Depends(get_db)):
+    return {"items": staff_service.get_exam_history_by_pet(db, ma_thu_cung)}
+
+@router.get("/history/vaccines")
+def get_pet_vaccine_history(ma_thu_cung: str, db: Session = Depends(get_db)):
+    return {"items": staff_service.get_vaccine_history_by_pet(db, ma_thu_cung)}
+
+from typing import Optional
+@router.get("/bookings")
+def get_customer_bookings(
+    ma_cn: str, 
+    ma_kh: Optional[str] = None, 
+    ma_dv: str = 'DV001',
+    db: Session = Depends(get_db)
+):
+    return {"items": staff_service.get_bookings_by_customer(db, ma_cn, ma_kh, ma_dv)}
+
+@router.post("/examination/complete")
+def complete_examination(data: dict, db: Session = Depends(get_db)):
+    # data bao gồm: ma_phien, ma_bs, trieu_chung, chan_doan, thuoc_list
+    return staff_service.complete_exam_process(
+        db, 
+        data['ma_phien'], 
+        data['ma_bs'], 
+        data['trieu_chung'], 
+        data['chan_doan'], 
+        data['thuoc_list']
+    )
+
+@router.post("/vaccination/complete")
+def complete_vaccination(data: dict, db: Session = Depends(get_db)):
+    # Phải truyền đúng 4 tham số như định nghĩa hàm ở Service
+    return staff_service.complete_vaccine_process(
+        db,                     # 1. db
+        data['ma_phien_goc'],   # 2. ma_phien
+        data['ma_bs'],          # 3. ma_bs
+        data['danh_sach_tiem']  # 4. danh_sach_tiem
+    )
+
+@router.get("/all-medicines")
+def api_get_all_medicines(db: Session = Depends(get_db)):
+    """API riêng cho bác sĩ lấy danh mục thuốc tổng"""
+    items = staff_service.get_all_medicines(db)
+    return {"items": items}
+
+@router.post("/examination/start")
+def api_start_examination(data: dict, db: Session = Depends(get_db)):
+    ma_phien = data.get("ma_phien")
+    if not ma_phien:
+        raise HTTPException(status_code=400, detail="Thiếu mã phiên")
+    
+    # Gọi hàm từ service đã tách ở trên
+    return staff_service.start_examination(db, ma_phien)
+
+@router.get("/history/daily-all")
+def get_daily_history(ma_cn: str, date: str, db: Session = Depends(get_db)):
+    """
+    API trả về nhật ký làm việc trong ngày của chi nhánh
+    """
+    # date định dạng: YYYY-MM-DD
+    return staff_service.get_daily_history_all(db, ma_cn, date)
