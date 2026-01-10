@@ -37,10 +37,11 @@ def create_booking(
     ma_thu_cung: str,
     ma_dv: str,
     ma_cn: str,
+    thoi_diem_bat_dau: str,
     db: Session = Depends(get_db),
 ):
     return customer_service.kh16_create_booking(
-        db, ma_kh, ma_thu_cung, ma_dv, ma_cn
+        db, ma_kh, ma_thu_cung, ma_dv, ma_cn, thoi_diem_bat_dau
     )
 
 @router.get("/me/bookings")

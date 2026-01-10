@@ -324,8 +324,8 @@ def kh13_list_services(db: Session, ma_cn: Optional[str] = None):
         text("""
             SELECT MaDV, TenDV, DonGia
             FROM DICHVU
-            WHERE :cn IS NULL 
-               OR MaDV IN (SELECT MaDV FROM CUNGCAPDICHVU WHERE MaCN = :cn)
+            WHERE MaDV <> 'DV_RETAIL'
+               AND (:cn IS NULL OR MaDV IN (SELECT MaDV FROM CUNGCAPDICHVU WHERE MaCN = :cn))
         """),
         {"cn": ma_cn}
     ).mappings().all()
@@ -400,6 +400,7 @@ def kh16_create_booking(
     ma_thu_cung: str,
     ma_dv: str,
     ma_cn: str,
+    thoi_diem_bat_dau: str,
     ma_nv: Optional[str] = 'NV_SYSTEM'
 ):
     # ---------------------------------------------------
@@ -493,7 +494,7 @@ def kh16_create_booking(
                 OUTPUT INSERTED.MaPhien INTO @out
                 VALUES (
                     :hd, :tc, :dv,
-                    :gia, N'BOOKING', :cn, GETDATE()
+                    :gia, N'BOOKING', :cn, :start_time -- <--- Dùng tham số truyền vào
                 );
 
                 SELECT MaPhien FROM @out;
@@ -504,6 +505,7 @@ def kh16_create_booking(
                 "dv": ma_dv,
                 "gia": gia,
                 "cn": ma_cn,
+                "start_time": thoi_diem_bat_dau # <--- Truyền vào SQL
             },
         ).scalar()
 
@@ -526,6 +528,7 @@ def kh16_create_booking(
             "MaPhien": ma_phien,
             "MaCN": ma_cn,
             "TenThuCung": pet.Ten,
+            "ThoiDiem": thoi_diem_bat_dau
         }
 
     except Exception as e:

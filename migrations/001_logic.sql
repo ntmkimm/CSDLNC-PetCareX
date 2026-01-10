@@ -34,21 +34,21 @@ BEGIN
     -- Dịch vụ
     SELECT @Tong += ISNULL(SUM(GiaTien),0)
     FROM PHIENDICHVU
-    WHERE MaHoaDon = @MaHoaDon;
+    WHERE MaHoaDon = @MaHoaDon AND TrangThai <> N'CANCELLED';
 
     -- Thuốc
     SELECT @Tong += ISNULL(SUM(tt.Soluong * sp.DonGia),0)
     FROM PHIENDICHVU pd
     JOIN TOATHUOC tt ON pd.MaPhien = tt.MaPhien
     JOIN SANPHAM sp ON tt.MaThuoc = sp.MaSP
-    WHERE pd.MaHoaDon = @MaHoaDon;
+    WHERE pd.MaHoaDon = @MaHoaDon AND pd.TrangThai <> N'CANCELLED';
 
     -- Mua hàng
     SELECT @Tong += ISNULL(SUM(mh.SoLuong * sp.DonGia),0)
     FROM PHIENDICHVU pd
     JOIN MUAHANG mh ON pd.MaPhien = mh.MaPhien
     JOIN SANPHAM sp ON mh.MaSP = sp.MaSP
-    WHERE pd.MaHoaDon = @MaHoaDon;
+    WHERE pd.MaHoaDon = @MaHoaDon AND pd.TrangThai <> N'CANCELLED';
 
     -- Tiêm lẻ
     SELECT @Tong += ISNULL(SUM(tp.SoLieu * vc.DonGia),0)
@@ -56,7 +56,7 @@ BEGIN
     JOIN TIEMPHONG tp ON pd.MaPhien = tp.MaPhien
     JOIN VACCINE vc ON tp.MaVC = vc.MaVC
     WHERE pd.MaHoaDon = @MaHoaDon
-      AND tp.MaGoi IS NULL;
+      AND tp.MaGoi IS NULL AND pd.TrangThai <> N'CANCELLED';
 
     -- Gói
     SELECT @Tong += ISNULL(SUM(dbo.fn_GiaGoiTiemPhong(MaGoi)),0)
@@ -237,18 +237,25 @@ BEGIN
 
         -- 3. Confirm phiên dịch vụ
         UPDATE pd
-        SET 
-            pd.GiaTien = CASE 
+        SET
+            pd.GiaTien = CASE
                 WHEN pd.MaDV = 'DV_RETAIL' THEN 0
                 WHEN pd.GiaTien IS NULL OR pd.GiaTien = 0 THEN dv.DonGia
                 ELSE pd.GiaTien
             END,
-            pd.TrangThai = N'CONFIRMED',
-            pd.ThoiDiemKetThuc = GETDATE()
+            pd.TrangThai = CASE
+                WHEN pd.MaDV = 'DV_RETAIL' THEN N'CONFIRMED'
+                ELSE N'IN_SERVICE'
+            END,
+            pd.ThoiDiemKetThuc = CASE
+                WHEN pd.MaDV = 'DV_RETAIL' THEN GETDATE()
+                ELSE NULL              -- đang IN_SERVICE thì thường chưa có thời điểm kết thúc
+            END
+            
         FROM PHIENDICHVU pd
         LEFT JOIN DICHVU dv ON pd.MaDV = dv.MaDV
-        WHERE pd.MaHoaDon = @MaHoaDon 
-          AND pd.TrangThai = N'BOOKING';
+        WHERE pd.MaHoaDon = @MaHoaDon
+        AND pd.TrangThai = N'BOOKING';
 
         -- 4. Update thông tin hóa đơn
         UPDATE HOADON
